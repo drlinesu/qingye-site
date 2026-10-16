@@ -202,6 +202,61 @@
       });
     },
 
+    /* ---------- 邮箱验证码登录（Supabase Auth Email OTP） ---------- */
+    /* GoTrue 错误码 → 中文文案；后端不可用统一 code:'unavailable' 供云盾降级演示模式 */
+    _authErr: function (err) {
+      var raw = String((err && (err.code || err.error || err.message || err.msg)) || '').toLowerCase();
+      var status = err && err.status;
+      if (raw.indexOf('over_email_send_rate_limit') >= 0 || status === 429)
+        return { ok: false, code: 'rate_limit', msg: '发送过于频繁，请 60 秒后重试' };
+      if (raw.indexOf('otp_disabled') >= 0)
+        return { ok: false, code: 'disabled', msg: '邮箱登录未开放或已停止新注册' };
+      if (raw.indexOf('otp_expired') >= 0 || raw.indexOf('token has expired') >= 0 || raw.indexOf('invalid') >= 0)
+        return { ok: false, code: 'bad_token', msg: '验证码错误或已过期' };
+      if (raw.indexOf('email_address_invalid') >= 0 || raw.indexOf('valid email') >= 0)
+        return { ok: false, code: 'bad_email', msg: '邮箱格式不正确' };
+      if (raw.indexOf('validation_failed') >= 0)
+        return { ok: false, code: 'bad_request', msg: '请求参数有误' };
+      return { ok: false, code: 'error', msg: (err && err.message) || '认证服务异常，请稍后重试' };
+    },
+    /* 发送邮箱验证码（新用户自动注册）。成功 {ok:true}；后端不可用 {ok:false,code:'unavailable'} */
+    sendEmailOtp: function (email) {
+      var self = this;
+      return self._getClient().then(function (client) {
+        if (!client) return { ok: false, code: 'unavailable' };
+        return client.auth.signInWithOtp({ email: String(email), options: { shouldCreateUser: true } })
+          .then(function (res) {
+            if (res && res.error) return self._authErr(res.error);
+            return { ok: true };
+          })
+          .catch(function (e) {
+            var t = self._authErr(e);
+            /* 网络层故障（fetch failed / NetworkError / Failed to fetch）→ 触发降级 */
+            var raw = String((e && (e.message || e.name)) || '').toLowerCase();
+            if (raw.indexOf('fetch') >= 0 || raw.indexOf('network') >= 0 || raw.indexOf('load failed') >= 0) t.code = 'unavailable';
+            return t;
+          });
+      }).catch(function () { return { ok: false, code: 'unavailable' }; });
+    },
+    /* 校验邮箱验证码。type:'email' 对新用户注册码与老用户魔法链接码通用（GoTrue 内部改写） */
+    verifyEmailOtp: function (email, token) {
+      var self = this;
+      return self._getClient().then(function (client) {
+        if (!client) return { ok: false, code: 'unavailable' };
+        return client.auth.verifyOtp({ email: String(email), token: String(token), type: 'email' })
+          .then(function (res) {
+            if (res && res.error) return self._authErr(res.error);
+            return { ok: true, userId: res.data && res.data.user ? res.data.user.id : null };
+          })
+          .catch(function (e) {
+            var t = self._authErr(e);
+            var raw = String((e && (e.message || e.name)) || '').toLowerCase();
+            if (raw.indexOf('fetch') >= 0 || raw.indexOf('network') >= 0 || raw.indexOf('load failed') >= 0) t.code = 'unavailable';
+            return t;
+          });
+      }).catch(function () { return { ok: false, code: 'unavailable' }; });
+    },
+
     /* 读取 waf_logs（管理端） */
     getWafLogs: function () {
       var self = this;
