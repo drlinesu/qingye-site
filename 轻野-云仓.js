@@ -379,9 +379,6 @@
 
   global.QYHub = Hub;
 
-  /* 用户端启动时拉取 GitHub 配置覆盖本机 */
-  whenReady(function () {
-    if (global.__CS_ADMIN__ === true) return;
-    Hub.syncToLocal().catch(function () {});
-  });
+  /* 后端访问最小化：用户端启动不再自动拉取 GitHub 配置，
+     仅在捐赠场景由 QYDonation 按需读取；管理端不受影响。 */
 })(window);
