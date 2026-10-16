@@ -374,21 +374,15 @@
     var modal = el('div', {
       style: 'background:#fff;border-radius:18px;padding:26px 24px;max-width:380px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.25);animation:qyDnIn .35s cubic-bezier(.22,1,.36,1) both'
     });
-    var nameInput = el('input', { type: 'text', placeholder: '留下你的名字（选填，默认匿名轻野人）', style: 'width:100%;padding:10px;border:1px solid #e2e8f0;border-radius:10px;margin:8px 0;box-sizing:border-box;font-size:14px' });
-    var amountBox = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:10px;margin:10px 0' });
     var leaderBox = el('div', { style: 'margin-top:14px' });
-    var thanksBox = el('div', { style: 'display:none;text-align:center;padding:20px 0' });
     modal.appendChild(el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px' }, [
       el('div', { style: 'font-size:18px;font-weight:600;color:#0f172a' }, ['❤ 支持轻野']),
       el('button', { style: 'border:none;background:transparent;font-size:20px;color:#94a3b8;cursor:pointer', onclick: closeDonation }, ['✕'])
     ]));
     modal.appendChild(el('p', { style: 'color:#475569;font-size:13px;line-height:1.6;margin:0 0 4px' }, ['如果你认为使用情况不错，可以给网页一点小小的捐赠。']));
-    var afdBtnWrap = el('div', { style: 'display:none;margin:10px 0 2px' });
+    var afdBtnWrap = el('div', { style: 'margin:10px 0 2px' });
     modal.appendChild(afdBtnWrap);
-    modal.appendChild(nameInput);
-    modal.appendChild(amountBox);
     modal.appendChild(leaderBox);
-    modal.appendChild(thanksBox);
     ov.appendChild(modal);
     document.body.appendChild(ov);
 
@@ -417,10 +411,9 @@
     }
     renderLeaderboard(leaderBox);
 
-    /* 爱发电真实收款入口（管理员配置后才显示） */
+    /* 爱发电收款入口：内置默认主页，管理员可在后台覆盖 */
     Donation.getAfdianUrl().then(function (u) {
       if (!u) return;
-      afdBtnWrap.style.display = 'block';
       afdBtnWrap.appendChild(el('a', {
         href: u,
         target: '_blank',
@@ -430,68 +423,6 @@
         onmouseout: function (e) { e.currentTarget.style.transform = ''; }
       }, ['⚡ 前往爱发电支持']));
     }).catch(function () {});
-
-    Donation.getAmounts().then(function (arr) {
-      amountBox.innerHTML = '';
-      arr.forEach(function (amt) {
-        amountBox.appendChild(el('button', {
-          style: 'border:1px solid #e2e8f0;background:#fff;border-radius:12px;padding:14px 0;font-size:16px;font-weight:600;color:#e11d48;cursor:pointer;transition:all .15s',
-          onmouseover: function (e) { e.currentTarget.style.background = '#fff1f2'; e.currentTarget.style.borderColor = '#fb7185'; },
-          onmouseout: function (e) { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#e2e8f0'; },
-          onclick: function () { showThanks(amt); }
-        }, ['¥' + amt]));
-      });
-      amountBox.appendChild(el('button', {
-        style: 'border:1px dashed #cbd5e1;background:#f8fafc;border-radius:12px;padding:14px 0;font-size:14px;color:#64748b;cursor:pointer;transition:all .15s',
-        onmouseover: function (e) { e.currentTarget.style.background = '#f1f5f9'; },
-        onmouseout: function (e) { e.currentTarget.style.background = '#f8fafc'; },
-        onclick: function () {
-          var v = prompt('输入自定义金额（元）');
-          if (v == null) return;
-          var n = parseFloat(v);
-          if (isNaN(n) || n <= 0) { toast('金额无效'); return; }
-          showThanks(Math.round(n * 100) / 100);
-        }
-      }, ['✎ 自定义']));
-    });
-
-    function showThanks(amt) {
-      var donorName = nameInput.value.trim() || '匿名轻野人';
-      /* 记录捐款 */
-      Donation.addRecord(donorName, amt).then(function () {
-        amountBox.style.display = 'none';
-        nameInput.style.display = 'none';
-        leaderBox.style.display = 'none';
-        thanksBox.style.display = 'block';
-        thanksBox.innerHTML = '';
-        thanksBox.appendChild(el('div', { style: 'font-size:40px' }, ['💐']));
-        thanksBox.appendChild(el('div', { style: 'font-size:20px;font-weight:600;color:#0f172a;margin:8px 0' }, ['感谢 ' + donorName + ' 的支持！']));
-        /* 更新感谢名单（含本次捐款者高亮） */
-        renderLeaderboard(thanksBox, donorName);
-        /* 爱发电真实收款入口：已配置则显示跳转按钮，未配置保留演示文案 */
-        Donation.getAfdianUrl().then(function (u) {
-          if (u) {
-            thanksBox.appendChild(el('a', {
-              href: u,
-              target: '_blank',
-              rel: 'noopener noreferrer',
-              style: 'display:block;text-align:center;background:linear-gradient(135deg,#f59e0b,#f97316);color:#fff;border-radius:999px;padding:11px 0;font-size:14px;font-weight:600;text-decoration:none;margin:0 0 10px',
-              onclick: function () { try { toast('感谢你的真实支持！'); } catch (e) {} }
-            }, ['⚡ 前往爱发电完成真实支持 →']));
-            thanksBox.appendChild(el('p', { style: 'color:#94a3b8;font-size:12px;line-height:1.6;margin:0 0 12px' }, ['演示记录已保存至感谢名单，真实捐赠请前往爱发电完成。']));
-          } else {
-            thanksBox.appendChild(el('p', { style: 'color:#475569;font-size:13px;line-height:1.6;margin:0 0 16px' }, ['你的鼓励是轻野继续前行的动力。当前为演示入口，暂未接入实际支付；如需真实捐赠，请联系站点管理员获取收款方式。']));
-          }
-        }).catch(function () {});
-        thanksBox.appendChild(el('button', {
-          style: 'border:none;background:#e11d48;color:#fff;border-radius:999px;padding:10px 22px;font-size:14px;cursor:pointer;margin-top:12px',
-          onclick: closeDonation
-        }, ['好的']));
-      }).catch(function () {
-        toast('记录保存失败，但感谢你的心意！');
-        closeDonation();
-      });
-    }
   }
   function closeDonation() { var o = $('qyDnOv'); if (o) o.remove(); }
 
