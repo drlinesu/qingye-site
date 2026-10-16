@@ -400,21 +400,38 @@
   var Auth = {
     // 当前会话
     session: null,
-    // 发送验证码（邮箱验证，免费方案：验证码直接展示给用户）
+    // 发送验证码：优先走 Supabase 真实邮件 OTP；后端不可用时降级本地演示码
+    // 云端模式 resolve {cloud:true}（无明文码）；演示模式 resolve {cloud:false, code:'123456'}
     sendCode: function (email) {
       var rl = RateLimit.check('sms');
       if (!rl.ok) return Promise.reject(new Error('请求过于频繁，请 ' + rl.remain + ' 秒后重试'));
       if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(email)) return Promise.reject(new Error('邮箱格式不正确'));
       var waf = Waf.check(email);
       if (!waf.ok) { Waf.logAttack(email, waf.reason); return Promise.reject(new Error(waf.reason)); }
-      var code = String(Math.floor(100000 + Math.random() * 900000));
+
       var codes = Store.json('smsCodes') || {};
-      codes[email] = { code: code, expiresAt: now() + 5 * 60 * 1000, attempts: 0 };
-      Store.json('smsCodes', codes);
-      // 免费方案：验证码直接返回（实际生产应通过邮件网关下发）
-      return Promise.resolve(code);
+      /* 本地演示码逻辑（Supabase 缺失/离线时降级使用） */
+      function demoCode() {
+        var code = String(Math.floor(100000 + Math.random() * 900000));
+        codes[email] = { code: code, expiresAt: now() + 5 * 60 * 1000, attempts: 0 };
+        Store.json('smsCodes', codes);
+        return { cloud: false, code: code };
+      }
+
+      if (global.QYBridge && typeof global.QYBridge.sendEmailOtp === 'function') {
+        return global.QYBridge.sendEmailOtp(email).then(function (r) {
+          if (r && r.ok) {
+            codes[email] = { cloud: true, expiresAt: now() + 24 * 60 * 60 * 1000, attempts: 0 };
+            Store.json('smsCodes', codes);
+            return { cloud: true };
+          }
+          if (r && r.code === 'unavailable') return demoCode();
+          throw new Error((r && r.msg) || '验证码发送失败');
+        });
+      }
+      return Promise.resolve(demoCode());
     },
-    // 登录/注册（邮箱 + 验证码；用户端不启用 MFA）
+    // 登录/注册（云端 OTP 或本地演示码；用户端不启用 MFA）
     login: function (email, code) {
       var self = this;
       var rl = RateLimit.check('login');
@@ -423,14 +440,41 @@
       if (!waf.ok) { Waf.logAttack(email, waf.reason); return Promise.reject(new Error(waf.reason)); }
       var codes = Store.json('smsCodes') || {};
       var rec = codes[email];
-      if (!rec || rec.code !== code || rec.expiresAt < now()) {
+      if (!rec || rec.expiresAt < now()) {
+        return Promise.reject(new Error('请先获取验证码'));
+      }
+
+      /* 云端模式：交 Supabase Auth 校验 */
+      if (rec.cloud === true) {
+        if (!global.QYBridge || typeof global.QYBridge.verifyEmailOtp !== 'function') {
+          return Promise.reject(new Error('认证服务暂不可用，请重新获取验证码'));
+        }
+        return global.QYBridge.verifyEmailOtp(email, code).then(function (r) {
+          if (!r || !r.ok) {
+            rec.attempts = (rec.attempts || 0) + 1;
+            codes[email] = rec;
+            Store.json('smsCodes', codes);
+            throw new Error((r && r.msg) || '验证码错误或已过期');
+          }
+          /* 校验通过后清除 */
+          delete codes[email];
+          Store.json('smsCodes', codes);
+          return self._afterVerified(email);
+        });
+      }
+
+      /* 本地演示码模式 */
+      if (rec.code !== code) {
         return Promise.reject(new Error('验证码错误或已过期'));
       }
       // 验证码正确后清除
       delete codes[email];
       Store.json('smsCodes', codes);
-
-      // 用户记录走加密数据通道（两端数据传送加密；phone 字段兼容存邮箱，下游表结构不变）
+      return self._afterVerified(email);
+    },
+    /* 验证码通过后的统一入口：写 users 记录并建立本地会话（云端/演示共用） */
+    _afterVerified: function (email) {
+      var self = this;
       return Channel.read('users').then(function (users) {
         users = users || {};
         var isNew = !users[email];
@@ -704,8 +748,12 @@
         sendBtn.textContent = '发送中…';
         msg.className = 'cs-msg';
         msg.textContent = '';
-        Auth.sendCode(email).then(function (code) {
-          msg.textContent = '验证码已发送：' + code + '（演示模式：验证码直接展示，正式版通过邮件下发）';
+        Auth.sendCode(email).then(function (res) {
+          if (res && res.cloud) {
+            msg.textContent = '📧 验证码已发送至邮箱，请查收（含垃圾邮件），24 小时内有效。请勿点击邮件内链接，否则验证码会失效。';
+          } else {
+            msg.textContent = '验证码已发送：' + (res && res.code) + '（演示模式：认证服务不可达，验证码直接展示）';
+          }
           msg.className = 'cs-msg cs-msg-info';
           var sec = 60;
           sendBtn.textContent = sec + 's 后重发';
