@@ -1,4 +1,4 @@
-﻿/* ============================================================
+﻿﻿﻿﻿﻿/* ============================================================
  * 轻野 · 云盾 (Light Wild · Cloud Shield)
  * 客户端安全网关 —— 纯浏览器原生 API 实现（零后端、零依赖、免费）
  * 功能：邮箱验证登入 / 接口防刷 / WAF / 证书认证 / 管理端MFA / 数据加密 / 云端储存 / 独立管理端
@@ -421,12 +421,40 @@
       if (global.QYBridge && typeof global.QYBridge.sendEmailOtp === 'function') {
         return global.QYBridge.sendEmailOtp(email).then(function (r) {
           if (r && r.ok) {
-            codes[email] = { cloud: true, expiresAt: now() + 24 * 60 * 60 * 1000, attempts: 0 };
+            codes[email] = { cloud: 'email', expiresAt: now() + 24 * 60 * 60 * 1000, attempts: 0 };
             Store.json('smsCodes', codes);
             return { cloud: true };
           }
           if (r && r.code === 'unavailable') return demoCode();
           throw new Error((r && r.msg) || '验证码发送失败');
+        });
+      }
+      return Promise.resolve(demoCode());
+    },
+    // 注册专用发送验证码：邮箱+密码在 Supabase 建档并下发注册确认邮件；后端不可用降级本地演示码
+    sendSignupCode: function (email, password) {
+      var rl = RateLimit.check('sms');
+      if (!rl.ok) return Promise.reject(new Error('请求过于频繁，请 ' + rl.remain + ' 秒后重试'));
+      if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(email)) return Promise.reject(new Error('邮箱格式不正确'));
+      if (!password || password.length < 8 || password.length > 32) return Promise.reject(new Error('密码长度需 8-32 位'));
+      var waf = Waf.check(email);
+      if (!waf.ok) { Waf.logAttack(email, waf.reason); return Promise.reject(new Error(waf.reason)); }
+      var codes = Store.json('smsCodes') || {};
+      function demoCode() {
+        var code = String(Math.floor(100000 + Math.random() * 900000));
+        codes[email] = { code: code, expiresAt: now() + 5 * 60 * 1000, attempts: 0 };
+        Store.json('smsCodes', codes);
+        return { cloud: false, code: code };
+      }
+      if (global.QYBridge && typeof global.QYBridge.signUpEmail === 'function') {
+        return global.QYBridge.signUpEmail(email, password).then(function (r) {
+          if (r && r.ok) {
+            codes[email] = { cloud: 'signup', expiresAt: now() + 24 * 60 * 60 * 1000, attempts: 0 };
+            Store.json('smsCodes', codes);
+            return { cloud: true };
+          }
+          if (r && r.code === 'unavailable') return demoCode();
+          throw new Error((r && r.msg) || '注册失败，请稍后重试');
         });
       }
       return Promise.resolve(demoCode());
@@ -444,23 +472,12 @@
         return Promise.reject(new Error('请先获取验证码'));
       }
 
-      /* 云端模式：交 Supabase Auth 校验 */
-      if (rec.cloud === true) {
-        if (!global.QYBridge || typeof global.QYBridge.verifyEmailOtp !== 'function') {
-          return Promise.reject(new Error('认证服务暂不可用，请重新获取验证码'));
-        }
-        return global.QYBridge.verifyEmailOtp(email, code).then(function (r) {
-          if (!r || !r.ok) {
-            rec.attempts = (rec.attempts || 0) + 1;
-            codes[email] = rec;
-            Store.json('smsCodes', codes);
-            throw new Error((r && r.msg) || '验证码错误或已过期');
-          }
-          /* 校验通过后清除 */
-          delete codes[email];
-          Store.json('smsCodes', codes);
-          return self._afterVerified(email);
-        });
+      /* 云端模式：交 Supabase Auth 校验（登录码 type:'email'） */
+      if (rec.cloud === 'email') {
+        return self._verifyCloud(email, code, rec, codes, 'email');
+      }
+      if (rec.cloud === 'signup') {
+        return Promise.reject(new Error('该验证码用于注册，请切换到注册标签完成注册'));
       }
 
       /* 本地演示码模式 */
@@ -471,6 +488,48 @@
       delete codes[email];
       Store.json('smsCodes', codes);
       return self._afterVerified(email);
+    },
+    // 注册提交：校验注册确认邮件中的验证码（type:'signup'），通过即建档登录
+    register: function (email, code) {
+      var self = this;
+      var rl = RateLimit.check('login');
+      if (!rl.ok) return Promise.reject(new Error('请求过于频繁，请 ' + rl.remain + ' 秒后重试'));
+      var codes = Store.json('smsCodes') || {};
+      var rec = codes[email];
+      if (!rec || rec.expiresAt < now()) {
+        return Promise.reject(new Error('请先获取注册验证码'));
+      }
+      if (rec.cloud === 'signup') {
+        return self._verifyCloud(email, code, rec, codes, 'signup');
+      }
+      if (rec.cloud === 'email') {
+        return Promise.reject(new Error('该邮箱已注册，请直接登录'));
+      }
+      /* 本地演示码模式（后端不可达时的降级注册：密码仅做前端一致性校验，本地不存密码） */
+      if (rec.code !== code) {
+        return Promise.reject(new Error('验证码错误或已过期'));
+      }
+      delete codes[email];
+      Store.json('smsCodes', codes);
+      return self._afterVerified(email);
+    },
+    /* 云端 OTP 校验共用：成功后清码并建立会话 */
+    _verifyCloud: function (email, code, rec, codes, otpType) {
+      var self = this;
+      if (!global.QYBridge || typeof global.QYBridge.verifyEmailOtp !== 'function') {
+        return Promise.reject(new Error('认证服务暂不可用，请重新获取验证码'));
+      }
+      return global.QYBridge.verifyEmailOtp(email, code, otpType).then(function (r) {
+        if (!r || !r.ok) {
+          rec.attempts = (rec.attempts || 0) + 1;
+          codes[email] = rec;
+          Store.json('smsCodes', codes);
+          throw new Error((r && r.msg) || '验证码错误或已过期');
+        }
+        delete codes[email];
+        Store.json('smsCodes', codes);
+        return self._afterVerified(email);
+      });
     },
     /* 验证码通过后的统一入口：写 users 记录并建立本地会话（云端/演示共用） */
     _afterVerified: function (email) {
@@ -735,66 +794,156 @@
     },
     renderUserForm: function (form) {
       var self = this;
-      var emailInput = el('input', { type: 'email', placeholder: '请输入邮箱', id: 'csEmail' });
-      var codeInput = el('input', { type: 'text', placeholder: '6 位验证码', maxlength: '6', id: 'csCode' });
-      var sendBtn = el('button', { class: 'cs-btn cs-btn-outline', id: 'csSend' }, ['获取验证码']);
-      var loginBtn = el('button', { class: 'cs-btn cs-btn-primary', id: 'csUserLoginBtn' }, ['登入 / 注册']);
+      var mode = 'login'; // 'login' = 邮箱验证码登录（无需密码）；'register' = 设置密码注册
+      var tabWrap = el('div', { style: 'display:flex;gap:8px;margin-bottom:12px' });
+      var tabLogin = el('button', { type: 'button', class: 'cs-btn cs-btn-sm', style: 'flex:1' });
+      var tabReg = el('button', { type: 'button', class: 'cs-btn cs-btn-sm', style: 'flex:1' });
+      tabWrap.appendChild(tabLogin);
+      tabWrap.appendChild(tabReg);
+
+      var fields = el('div');
       var msg = el('div', { class: 'cs-msg', id: 'csMsg' });
-
-      sendBtn.onclick = function () {
-        if (sendBtn.disabled) return;
-        var email = emailInput.value.trim();
-        sendBtn.disabled = true;
-        sendBtn.textContent = '发送中…';
-        msg.className = 'cs-msg';
-        msg.textContent = '';
-        Auth.sendCode(email).then(function (res) {
-          if (res && res.cloud) {
-            msg.textContent = '📧 验证码已发送至邮箱，请查收（含垃圾邮件），24 小时内有效。请勿点击邮件内链接，否则验证码会失效。';
-          } else {
-            msg.textContent = '验证码已发送：' + (res && res.code) + '（演示模式：认证服务不可达，验证码直接展示）';
-          }
-          msg.className = 'cs-msg cs-msg-info';
-          var sec = 60;
-          sendBtn.textContent = sec + 's 后重发';
-          var t = setInterval(function () {
-            sendBtn.textContent = sec + 's 后重发';
-            if (--sec < 0) { clearInterval(t); sendBtn.disabled = false; sendBtn.textContent = '获取验证码'; }
-          }, 1000);
-        }).catch(function (e) {
-          sendBtn.disabled = false;
-          sendBtn.textContent = '获取验证码';
-          msg.textContent = e.message;
-          msg.className = 'cs-msg cs-msg-error';
-        });
-      };
-
-      var submit = function () {
-        if (loginBtn.disabled) return;
-        loginBtn.disabled = true;
-        loginBtn.classList.add('cs-btn-loading');
-        msg.className = 'cs-msg';
-        msg.textContent = '';
-        var email = emailInput.value.trim();
-        var code = codeInput.value.trim();
-        Auth.login(email, code).then(function () {
-          self.unlock();
-        }).catch(function (e) {
-          loginBtn.disabled = false;
-          loginBtn.classList.remove('cs-btn-loading');
-          msg.textContent = e.message;
-          msg.className = 'cs-msg cs-msg-error';
-        });
-      };
-      loginBtn.onclick = submit;
-      [emailInput, codeInput].forEach(function (inp) {
-        inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
-      });
-
-      form.appendChild(el('div', { class: 'cs-row' }, [emailInput]));
-      form.appendChild(el('div', { class: 'cs-row cs-row-2' }, [codeInput, sendBtn]));
-      form.appendChild(el('div', { class: 'cs-row' }, [loginBtn]));
+      form.appendChild(tabWrap);
+      form.appendChild(fields);
       form.appendChild(msg);
+
+      function startCountdown(btn) {
+        var sec = 60;
+        btn.disabled = true;
+        btn.textContent = sec + 's 后重发';
+        var t = setInterval(function () {
+          btn.textContent = sec + 's 后重发';
+          if (--sec < 0) { clearInterval(t); btn.disabled = false; btn.textContent = '获取验证码'; }
+        }, 1000);
+      }
+      function failMsg(e) {
+        msg.textContent = (e && e.message) ? e.message : String(e);
+        msg.className = 'cs-msg cs-msg-error';
+      }
+
+      /* ---------- 登录模式：邮箱 + 验证码（无需密码） ---------- */
+      function renderLogin() {
+        mode = 'login';
+        msg.textContent = ''; msg.className = 'cs-msg';
+        fields.innerHTML = '';
+        tabLogin.className = 'cs-btn cs-btn-sm cs-btn-primary';
+        tabReg.className = 'cs-btn cs-btn-sm cs-btn-outline';
+        tabLogin.textContent = '验证码登录';
+        tabReg.textContent = '注册新账号';
+
+        var emailInput = el('input', { type: 'email', placeholder: '请输入邮箱', id: 'csEmail' });
+        var codeInput = el('input', { type: 'text', placeholder: '6 位验证码', maxlength: '6', id: 'csCode' });
+        var sendBtn = el('button', { type: 'button', class: 'cs-btn cs-btn-outline', id: 'csSend' }, ['获取验证码']);
+        var loginBtn = el('button', { type: 'button', class: 'cs-btn cs-btn-primary', id: 'csUserLoginBtn' }, ['登 录']);
+
+        sendBtn.onclick = function () {
+          if (sendBtn.disabled) return;
+          var email = emailInput.value.trim();
+          sendBtn.disabled = true;
+          sendBtn.textContent = '发送中…';
+          msg.className = 'cs-msg'; msg.textContent = '';
+          Auth.sendCode(email).then(function (res) {
+            msg.textContent = res && res.cloud
+              ? '📧 验证码已发送至邮箱，请查收（含垃圾邮件），24 小时内有效。请勿点击邮件内链接，否则验证码会失效。'
+              : '验证码已发送：' + (res && res.code) + '（演示模式：认证服务不可达，验证码直接展示）';
+            msg.className = 'cs-msg cs-msg-info';
+            startCountdown(sendBtn);
+          }).catch(function (e) {
+            sendBtn.disabled = false; sendBtn.textContent = '获取验证码'; failMsg(e);
+          });
+        };
+        var submit = function () {
+          if (loginBtn.disabled) return;
+          loginBtn.disabled = true;
+          loginBtn.classList.add('cs-btn-loading');
+          msg.className = 'cs-msg'; msg.textContent = '';
+          Auth.login(emailInput.value.trim(), codeInput.value.trim()).then(function () {
+            self.unlock();
+          }).catch(function (e) {
+            loginBtn.disabled = false;
+            loginBtn.classList.remove('cs-btn-loading');
+            failMsg(e);
+          });
+        };
+        loginBtn.onclick = submit;
+        [emailInput, codeInput].forEach(function (inp) {
+          inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+        });
+
+        fields.appendChild(el('div', { class: 'cs-row' }, [emailInput]));
+        fields.appendChild(el('div', { class: 'cs-row cs-row-2' }, [codeInput, sendBtn]));
+        fields.appendChild(el('div', { class: 'cs-row' }, [loginBtn]));
+      }
+
+      /* ---------- 注册模式：邮箱 + 密码 + 确认密码 + 验证码 ---------- */
+      function renderRegister() {
+        mode = 'register';
+        msg.textContent = ''; msg.className = 'cs-msg';
+        fields.innerHTML = '';
+        tabLogin.className = 'cs-btn cs-btn-sm cs-btn-outline';
+        tabReg.className = 'cs-btn cs-btn-sm cs-btn-primary';
+        tabLogin.textContent = '验证码登录';
+        tabReg.textContent = '注册新账号';
+
+        var emailInput = el('input', { type: 'email', placeholder: '邮箱（用于接收验证码）', id: 'csRegEmail' });
+        var pwdInput = el('input', { type: 'password', placeholder: '设置密码（8-32 位，建议字母+数字）', id: 'csRegPwd' });
+        var pwd2Input = el('input', { type: 'password', placeholder: '再次输入密码确认', id: 'csRegPwd2' });
+        var codeInput = el('input', { type: 'text', placeholder: '6 位邮箱验证码', maxlength: '6', id: 'csRegCode' });
+        var sendBtn = el('button', { type: 'button', class: 'cs-btn cs-btn-outline', id: 'csRegSend' }, ['获取验证码']);
+        var regBtn = el('button', { type: 'button', class: 'cs-btn cs-btn-primary', id: 'csRegBtn' }, ['注册并登录']);
+
+        sendBtn.onclick = function () {
+          if (sendBtn.disabled) return;
+          var email = emailInput.value.trim();
+          var pwd = pwdInput.value;
+          var pwd2 = pwd2Input.value;
+          if (!pwd) { failMsg(new Error('请先设置密码')); pwdInput.focus(); return; }
+          if (pwd.length < 8 || pwd.length > 32) { failMsg(new Error('密码长度需 8-32 位')); pwdInput.focus(); return; }
+          if (pwd !== pwd2) { failMsg(new Error('两次输入的密码不一致，请重新确认')); pwd2Input.focus(); return; }
+          sendBtn.disabled = true;
+          sendBtn.textContent = '发送中…';
+          msg.className = 'cs-msg'; msg.textContent = '';
+          Auth.sendSignupCode(email, pwd).then(function (res) {
+            msg.textContent = res && res.cloud
+              ? '📧 注册验证码已发送至邮箱，请查收（含垃圾邮件），24 小时内有效。请勿点击邮件内链接。'
+              : '验证码已发送：' + (res && res.code) + '（演示模式：认证服务不可达，验证码直接展示）';
+            msg.className = 'cs-msg cs-msg-info';
+            startCountdown(sendBtn);
+          }).catch(function (e) {
+            sendBtn.disabled = false; sendBtn.textContent = '获取验证码'; failMsg(e);
+          });
+        };
+        var submit = function () {
+          if (regBtn.disabled) return;
+          var pwd = pwdInput.value, pwd2 = pwd2Input.value;
+          if (pwd.length < 8 || pwd.length > 32) { failMsg(new Error('密码长度需 8-32 位')); return; }
+          if (pwd !== pwd2) { failMsg(new Error('两次输入的密码不一致，请重新确认')); return; }
+          regBtn.disabled = true;
+          regBtn.classList.add('cs-btn-loading');
+          msg.className = 'cs-msg'; msg.textContent = '';
+          Auth.register(emailInput.value.trim(), codeInput.value.trim()).then(function () {
+            self.unlock();
+          }).catch(function (e) {
+            regBtn.disabled = false;
+            regBtn.classList.remove('cs-btn-loading');
+            failMsg(e);
+          });
+        };
+        regBtn.onclick = submit;
+        [emailInput, pwdInput, pwd2Input, codeInput].forEach(function (inp) {
+          inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+        });
+
+        fields.appendChild(el('div', { class: 'cs-row' }, [emailInput]));
+        fields.appendChild(el('div', { class: 'cs-row' }, [pwdInput]));
+        fields.appendChild(el('div', { class: 'cs-row' }, [pwd2Input]));
+        fields.appendChild(el('div', { class: 'cs-row cs-row-2' }, [codeInput, sendBtn]));
+        fields.appendChild(el('div', { class: 'cs-row' }, [regBtn]));
+      }
+
+      tabLogin.onclick = renderLogin;
+      tabReg.onclick = renderRegister;
+      renderLogin();
     },
     renderAdminForm: function (form) {
       var self = this;
