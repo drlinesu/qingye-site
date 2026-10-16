@@ -64,26 +64,31 @@
     DEFAULT_AFD_URL: 'https://afdian.com/a/yichangqingye',
     getAmounts: function () {
       var self = this;
-      /* 优先 BaaS 桥接，降级 GitHub 云仓，再降级本机 Channel，最后默认值 */
+      /* 本地/默认值：Channel 即时返回（弹窗零等待） */
       function readLocal() {
         return global.CloudShield.Channel.read(self.KEY).then(function (a) {
           return (Array.isArray(a) && a.length) ? a.slice() : self.DEFAULT_AMOUNTS.slice();
         }).catch(function () { return self.DEFAULT_AMOUNTS.slice(); });
       }
-      function tryQYHub() {
-        if (!global.QYHub) return readLocal();
-        return global.QYHub.getConfig().then(function (cfg) {
-          if (cfg && Array.isArray(cfg.donationAmounts) && cfg.donationAmounts.length) return cfg.donationAmounts.slice();
-          return readLocal();
-        }).catch(function () { return readLocal(); });
-      }
-      if (global.QYBridge) {
-        return global.QYBridge.getConfig().then(function (cfg) {
-          if (cfg && Array.isArray(cfg.donationAmounts) && cfg.donationAmounts.length) return cfg.donationAmounts.slice();
-          return tryQYHub();
-        }).catch(function () { return tryQYHub(); });
-      }
-      return tryQYHub();
+      /* 云端静默刷新：只写缓存供下次打开生效，不阻塞本次渲染（捐款场景才外呼） */
+      (function silentRefresh() {
+        function apply(cfg) {
+          if (cfg && Array.isArray(cfg.donationAmounts) && cfg.donationAmounts.length) {
+            global.CloudShield.Channel.write(self.KEY, cfg.donationAmounts).catch(function () {});
+          }
+        }
+        try {
+          if (global.QYBridge) {
+            global.QYBridge.getConfig().then(function (cfg) {
+              if (cfg && cfg.donationAmounts) apply(cfg);
+              else if (global.QYHub) global.QYHub.getConfig().then(apply).catch(function () {});
+            }).catch(function () { if (global.QYHub) global.QYHub.getConfig().then(apply).catch(function () {}); });
+          } else if (global.QYHub) {
+            global.QYHub.getConfig().then(apply).catch(function () {});
+          }
+        } catch (e) {}
+      })();
+      return readLocal();
     },
     setAmounts: function (arr) {
       var self = this;
@@ -149,24 +154,27 @@
     /* ---------- 爱发电收款入口 ---------- */
     getAfdianUrl: function () {
       var self = this;
-      function readLocal() {
-        return global.CloudShield.Channel.read(self.AFD_KEY).then(function (u) {
-          return u || self.DEFAULT_AFD_URL;
-        }).catch(function () { return self.DEFAULT_AFD_URL; });
-      }
-      if (global.QYBridge) {
-        return global.QYBridge.getConfig().then(function (cfg) {
-          if (cfg && cfg.afdianUrl) return String(cfg.afdianUrl);
-          return readLocal();
-        }).catch(function () { return readLocal(); });
-      }
-      if (global.QYHub) {
-        return global.QYHub.getConfig().then(function (cfg) {
-          if (cfg && cfg.afdianUrl) return String(cfg.afdianUrl);
-          return readLocal();
-        }).catch(function () { return readLocal(); });
-      }
-      return readLocal();
+      /* 本地即时返回：管理员配置优先，否则内置默认主页（弹窗零等待） */
+      var localP = global.CloudShield.Channel.read(self.AFD_KEY).then(function (u) {
+        return u || self.DEFAULT_AFD_URL;
+      }).catch(function () { return self.DEFAULT_AFD_URL; });
+      /* 云端静默刷新缓存，不阻塞本次渲染（捐款场景才外呼） */
+      (function silentRefresh() {
+        function apply(cfg) {
+          if (cfg && cfg.afdianUrl) global.CloudShield.Channel.write(self.AFD_KEY, String(cfg.afdianUrl)).catch(function () {});
+        }
+        try {
+          if (global.QYBridge) {
+            global.QYBridge.getConfig().then(function (cfg) {
+              if (cfg && cfg.afdianUrl) apply(cfg);
+              else if (global.QYHub) global.QYHub.getConfig().then(apply).catch(function () {});
+            }).catch(function () { if (global.QYHub) global.QYHub.getConfig().then(apply).catch(function () {}); });
+          } else if (global.QYHub) {
+            global.QYHub.getConfig().then(apply).catch(function () {});
+          }
+        } catch (e) {}
+      })();
+      return localP;
     },
     setAfdianUrl: function (url) {
       var self = this;
