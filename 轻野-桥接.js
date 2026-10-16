@@ -1,4 +1,4 @@
-﻿/* ============================================================
+﻿﻿﻿﻿/* ============================================================
  * 轻野 · 桥接 (Light Wild · Bridge)
  * BaaS 中间层 —— 唯一与 Supabase 交互的模块（安全保护 + 隔离）
  *   ① 设计目的：后端只集中在本文件，后续迁移只改此一处
@@ -211,6 +211,8 @@
         return { ok: false, code: 'rate_limit', msg: '发送过于频繁，请 60 秒后重试' };
       if (raw.indexOf('otp_disabled') >= 0)
         return { ok: false, code: 'disabled', msg: '邮箱登录未开放或已停止新注册' };
+      if (raw.indexOf('already registered') >= 0 || raw.indexOf('user_already_exists') >= 0 || raw.indexOf('email_exists') >= 0)
+        return { ok: false, code: 'exists', msg: '该邮箱已注册，请直接用验证码登录' };
       if (raw.indexOf('otp_expired') >= 0 || raw.indexOf('token has expired') >= 0 || raw.indexOf('invalid') >= 0)
         return { ok: false, code: 'bad_token', msg: '验证码错误或已过期' };
       if (raw.indexOf('email_address_invalid') >= 0 || raw.indexOf('valid email') >= 0)
@@ -238,12 +240,37 @@
           });
       }).catch(function () { return { ok: false, code: 'unavailable' }; });
     },
-    /* 校验邮箱验证码。type:'email' 对新用户注册码与老用户魔法链接码通用（GoTrue 内部改写） */
-    verifyEmailOtp: function (email, token) {
+    /* 注册新账号（邮箱+密码）：GoTrue 创建用户并发确认邮件，码用 type:'signup' 校验 */
+    signUpEmail: function (email, password) {
       var self = this;
       return self._getClient().then(function (client) {
         if (!client) return { ok: false, code: 'unavailable' };
-        return client.auth.verifyOtp({ email: String(email), token: String(token), type: 'email' })
+        return client.auth.signUp({
+          email: String(email),
+          password: String(password),
+          options: { emailRedirectTo: global.location.origin }
+        }).then(function (res) {
+          if (res && res.error) return self._authErr(res.error);
+          /* GoTrue 防枚举：邮箱已存在时返回 identities 为空数组且不发信 */
+          var u = res && res.data && res.data.user;
+          if (u && Array.isArray(u.identities) && u.identities.length === 0)
+            return { ok: false, code: 'exists', msg: '该邮箱已注册，请直接用验证码登录' };
+          return { ok: true };
+        }).catch(function (e) {
+          var t = self._authErr(e);
+          var raw = String((e && (e.message || e.name)) || '').toLowerCase();
+          if (raw.indexOf('fetch') >= 0 || raw.indexOf('network') >= 0 || raw.indexOf('load failed') >= 0) t.code = 'unavailable';
+          return t;
+        });
+      }).catch(function () { return { ok: false, code: 'unavailable' }; });
+    },
+    /* 校验邮箱验证码。type：'email'（登录/OTP）或 'signup'（注册确认邮件），GoTrue 内部区分 */
+    verifyEmailOtp: function (email, token, otpType) {
+      var self = this;
+      var vType = otpType === 'signup' ? 'signup' : 'email';
+      return self._getClient().then(function (client) {
+        if (!client) return { ok: false, code: 'unavailable' };
+        return client.auth.verifyOtp({ email: String(email), token: String(token), type: vType })
           .then(function (res) {
             if (res && res.error) return self._authErr(res.error);
             return { ok: true, userId: res.data && res.data.user ? res.data.user.id : null };
