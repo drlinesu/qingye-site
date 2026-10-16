@@ -398,9 +398,8 @@
 
   global.QYBridge = Bridge;
 
-  /* 用户端启动时拉取 BaaS 配置覆盖本机 */
-  whenReady(function () {
-    if (global.__CS_ADMIN__ === true) return;
-    Bridge.syncToLocal().catch(function () {});
-  });
+  /* 后端访问最小化：用户端启动不再自动拉取云端配置。
+     云端配置仅在「账号登录」（sendEmailOtp/verifyEmailOtp）与「捐赠」
+     （打开捐赠弹窗时 QYDonation 读取）两个场景按需访问；
+     syncToLocal 方法保留，仅供管理端「立即同步」按钮主动调用。 */
 })(window);
