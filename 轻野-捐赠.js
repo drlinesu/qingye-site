@@ -60,6 +60,8 @@
     KEY: 'donationAmounts',
     DEFAULT_AMOUNTS: [5, 10, 20, 50],
     RECORDS_KEY: 'donationRecords',
+    AFD_KEY: 'afdianUrl',
+    DEFAULT_AFD_URL: 'https://afdian.com/a/yichangqingye',
     getAmounts: function () {
       var self = this;
       /* 优先 BaaS 桥接，降级 GitHub 云仓，再降级本机 Channel，最后默认值 */
@@ -149,8 +151,8 @@
       var self = this;
       function readLocal() {
         return global.CloudShield.Channel.read(self.AFD_KEY).then(function (u) {
-          return u || '';
-        }).catch(function () { return ''; });
+          return u || self.DEFAULT_AFD_URL;
+        }).catch(function () { return self.DEFAULT_AFD_URL; });
       }
       if (global.QYBridge) {
         return global.QYBridge.getConfig().then(function (cfg) {
