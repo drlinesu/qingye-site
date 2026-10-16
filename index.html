@@ -191,6 +191,96 @@
   body.i-bg::before{background:url("https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Anime%20style%20romantic%20seaside%20at%20dusk%20afterglow%2C%20beautiful%202k%20anime%20background%20art%2C%20glowing%20orange%20pink%20and%20lavender%20sky%20over%20calm%20sea%2C%20gentle%20waves%20sparkling%20with%20golden%20sunset%20light%2C%20soft%20dreamy%20clouds%2C%20distant%20small%20lighthouse%20silhouette%2C%20serene%20nostalgic%20slow%20travel%20mood%2C%20highly%20detailed%20anime%20scenery%20painting%2C%20no%20people%2C%20no%20text&image_size=landscape_16_9") center/cover no-repeat;animation:iBgIn 1.4s ease both}
   @keyframes iBgIn{from{opacity:0}to{opacity:1}}
   body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(180deg,rgba(241,245,249,.58),rgba(241,245,249,.68) 55%,rgba(241,245,249,.78));}
+  /* ============================================================
+   * 手机端专属排布（≤900px）——只在移动端覆盖，桌面端样式零改动
+   * 设计：简约 / 模块化 / 信息流「填信息→看结果→看地图→领券→轻旅行」
+   * 右列包裹 div 用 display:contents 融入主轴后用 order 重排
+   * ============================================================ */
+  @media (max-width:900px){
+    /* —— 顶栏：精简 —— */
+    header{padding:15px 14px 21px}
+    .hwrap{gap:8px}
+    .htitle{gap:9px}
+    .hlogo{width:36px;height:36px;border-radius:10px;font-size:20px}
+    .htitle h1{font-size:17px;letter-spacing:.2px}
+    .htitle p{display:none}
+    .hbtns{gap:6px}
+    .hbtn{padding:7px 12px;font-size:12px;border-radius:9px}
+
+    /* —— 主区：单列 flex，顺序重排 —— */
+    main{display:flex;flex-direction:column;gap:13px;margin:-11px auto 28px;padding:0 12px}
+    /* DOM 直接子节点：1 行程信息 / 2-7 六个折叠模块 / 8 右列包裹（结果+地图+参考） */
+    main>div:nth-child(8){display:contents}
+    main> :nth-child(1){order:1}                                  /* 行程信息 */
+    main>div:nth-child(8)>*:nth-child(1){order:2}                 /* 多种方式对比 */
+    main>div:nth-child(8)>*:nth-child(2){order:3}                 /* 路线地图 */
+    main> :nth-child(4){order:4}                                  /* 优惠券 */
+    main> :nth-child(7){order:5}                                  /* 轻旅行推荐 */
+    main> :nth-child(2){order:6}                                  /* 组合联运 */
+    main> :nth-child(3){order:7}                                  /* 周边抵达 */
+    main> :nth-child(5){order:8}                                  /* 当地美食 */
+    main> :nth-child(6){order:9}                                  /* 住宿推荐 */
+    main>div:nth-child(8)>*:nth-child(3){order:10}                /* 领券攻略 */
+    main>div:nth-child(8)>*:nth-child(4){order:11}                /* 费率参考 */
+    main>div:nth-child(8)>*:nth-child(5){order:12}                /* 设置 */
+
+    /* —— 卡片：更轻的留白 —— */
+    .card{padding:15px 14px;margin-bottom:0;border-radius:14px}
+    .card h2{font-size:14.5px;margin-bottom:12px}
+    details.card>summary{padding:14px 40px 14px 41px;font-size:14px}
+    details.card>summary .dicon{width:24px;height:24px;left:13px;font-size:13.5px}
+    details.card>summary::after{right:16px}
+    details.card .cbody{padding-left:14px;padding-right:14px}
+    .warn{font-size:10.5px;padding:8px 10px;margin:0 10px 10px}
+
+    /* —— 表单：竖排大触控；16px 字号防 iOS 聚焦自动放大 —— */
+    .frow{flex-direction:column;gap:9px;margin-bottom:10px}
+    input[type=text],input[type=number],input[type=password],select{padding:11px 12px;font-size:16px}
+    .seg button{padding:10px 0;font-size:13px}
+    .dist-note{font-size:11.5px}
+    .cpn-add,.setgrid{grid-template-columns:1fr}
+
+    /* —— 结果 KPI：2×2 大数字 —— */
+    .sumbanner{grid-template-columns:repeat(2,1fr);gap:9px;margin-bottom:12px}
+    .sumbanner .kpi{padding:10px 6px;border-radius:11px}
+    .kpi .kv{font-size:18px}
+    .kpi .kl{font-size:10.5px}
+    .mode .mhead{padding:12px 13px;gap:10px}
+    .mico{width:34px;height:34px;font-size:18px}
+    .mname{font-size:13.5px}
+    .mprice .pv{font-size:16px}
+    .bars .brow{grid-template-columns:64px 1fr 78px;gap:8px;font-size:12px}
+
+    /* —— 宽表格：卡片内横向滑动，不挤压整页 —— */
+    .mdetail{overflow-x:auto;-webkit-overflow-scrolling:touch}
+    .mdetail table{min-width:460px}
+    details.ref .cbody{overflow-x:auto;-webkit-overflow-scrolling:touch}
+    details.ref table{min-width:560px}
+    details.ref th,details.ref td{padding:7px 9px}
+
+    /* —— 地图：缩短高度，标签组横滑 —— */
+    #mapBox,.map-fallback{height:230px}
+    .maptabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+    .maptabs button{flex:none}
+    .map-links{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+    .map-links a{flex:none}
+
+    /* —— 攻略与参考 —— */
+    .tips li{font-size:12.5px;margin:7px 0 7px 16px}
+    details.ref summary{font-size:12.5px}
+    .rec{gap:8px}
+    .rec .rchip{font-size:11.5px;padding:6px 11px}
+    .cpn-item{font-size:12.5px;padding:9px 11px}
+
+    /* —— 弹窗：手机习惯的底部抽屉 —— */
+    .modal{padding:0;align-items:flex-end}
+    .mbox{max-width:100%;border-radius:18px 18px 0 0;padding:18px 16px calc(20px + env(safe-area-inset-bottom));max-height:92vh}
+    .mbox h3{font-size:15.5px}
+
+    /* —— 底部 / toast —— */
+    .foot{margin:0 auto 26px;padding:0 14px;font-size:11px}
+    .toast{max-width:92vw;font-size:12.5px;padding:10px 16px;bottom:calc(18px + env(safe-area-inset-bottom))}
+  }
 </style>
 <link rel="preconnect" href="https://cdn.bootcdn.net" crossorigin>
 <link rel="preconnect" href="https://unpkg.com" crossorigin>
@@ -205,11 +295,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610170033" defer></script>
-<script src="轻野-桥接.js?v=202610170033" defer></script>
-<script src="轻野-启程.js?v=202610170033" defer></script>
-<script src="轻野-捐赠.js?v=202610170033" defer></script>
-<script src="轻野-云仓.js?v=202610170033" defer></script>
+<script src="轻野-云盾.js?v=202610170059" defer></script>
+<script src="轻野-桥接.js?v=202610170059" defer></script>
+<script src="轻野-启程.js?v=202610170059" defer></script>
+<script src="轻野-捐赠.js?v=202610170059" defer></script>
+<script src="轻野-云仓.js?v=202610170059" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
