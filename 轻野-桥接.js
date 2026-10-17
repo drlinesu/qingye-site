@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿/* ============================================================
+﻿﻿﻿﻿﻿﻿﻿﻿﻿/* ============================================================
  * 轻野 · 桥接 (Light Wild · Bridge)
  * BaaS 中间层 —— 唯一与 Supabase 交互的模块（安全保护 + 隔离）
  *   ① 设计目的：后端只集中在本文件，后续迁移只改此一处
@@ -278,6 +278,33 @@
           .catch(function (e) {
             var t = self._authErr(e);
             var raw = String((e && (e.message || e.name)) || '').toLowerCase();
+            if (raw.indexOf('fetch') >= 0 || raw.indexOf('network') >= 0 || raw.indexOf('load failed') >= 0) t.code = 'unavailable';
+            return t;
+          });
+      }).catch(function () { return { ok: false, code: 'unavailable' }; });
+    },
+
+    /* 邮箱+密码登录（注册时已设置密码的用户） */
+    signInPassword: function (email, password) {
+      var self = this;
+      return self._getClient().then(function (client) {
+        if (!client) return { ok: false, code: 'unavailable' };
+        return client.auth.signInWithPassword({ email: String(email), password: String(password) })
+          .then(function (res) {
+            var err = res && res.error;
+            if (err) {
+              var raw = String(err.message || err.msg || err.code || '').toLowerCase();
+              if (raw.indexOf('invalid login credentials') >= 0 || raw.indexOf('email not confirmed') >= 0)
+                return { ok: false, code: 'bad_credentials', msg: '邮箱或密码不正确（未设置过密码请用验证码登录）' };
+              return self._authErr(err);
+            }
+            return { ok: true, userId: res.data && res.data.user ? res.data.user.id : null };
+          })
+          .catch(function (e) {
+            var raw = String((e && (e.message || e.name)) || '').toLowerCase();
+            if (raw.indexOf('invalid login credentials') >= 0 || raw.indexOf('email not confirmed') >= 0)
+              return { ok: false, code: 'bad_credentials', msg: '邮箱或密码不正确（未设置过密码请用验证码登录）' };
+            var t = self._authErr(e);
             if (raw.indexOf('fetch') >= 0 || raw.indexOf('network') >= 0 || raw.indexOf('load failed') >= 0) t.code = 'unavailable';
             return t;
           });
