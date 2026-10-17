@@ -1,4 +1,4 @@
-﻿﻿﻿﻿/* ============================================================
+﻿﻿﻿﻿﻿﻿﻿/* ============================================================
  * 轻野 · 桥接 (Light Wild · Bridge)
  * BaaS 中间层 —— 唯一与 Supabase 交互的模块（安全保护 + 隔离）
  *   ① 设计目的：后端只集中在本文件，后续迁移只改此一处
@@ -113,7 +113,7 @@
     },
     _writeCache: function (data) {
       try {
-        localStorage.setItem(STORAGE_PREFIX + CACHE_KEY, JSON.stringify({ t: Date.now(), data: data }));
+        localStorage.setItem(STORE_PREFIX + CACHE_KEY, JSON.stringify({ t: Date.now(), data: data }));
       } catch (e) {}
     },
 
@@ -325,6 +325,47 @@
       }
     },
 
+    /* ---------- 注册用户列表（管理端实时拉取，云端不落盘） ----------
+       走 GoTrue 管理接口 GET /auth/v1/admin/users，需 service_role 密钥；
+       密钥由管理员在管理端粘贴、经 Channel 加密仅存本机，绝不写入源码/云端。 */
+    fetchAuthUsers: function (serviceKey) {
+      var self = this;
+      return self.getSettings().then(function (s) {
+        if (!s.url) return { ok: false, msg: '未配置 Supabase URL' };
+        if (!serviceKey) return { ok: false, msg: '请先粘贴 service_role 密钥' };
+        var all = [];
+        var page = 1;
+        function req(p) {
+          return fetch(s.url + '/auth/v1/admin/users?per_page=200&page=' + p, {
+            headers: { apikey: serviceKey, Authorization: 'Bearer ' + serviceKey }
+          }).then(function (r) {
+            if (r.status === 401 || r.status === 403) throw new Error('密钥无效或权限不足（需 service_role 密钥）');
+            if (!r.ok) throw new Error('后端返回 HTTP ' + r.status);
+            return r.json();
+          });
+        }
+        function loop() {
+          return req(page).then(function (j) {
+            all = all.concat(j && j.users ? j.users : []);
+            var np = j ? j.nextpage : null;
+            if (np != null && np !== '' && page < 20) {
+              page = (typeof np === 'number') ? np : (parseInt(np, 10) || page + 1);
+              return loop();
+            }
+            return all;
+          });
+        }
+        return loop().then(function (users) {
+          users.sort(function (a, b) {
+            return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+          });
+          return { ok: true, users: users };
+        });
+      }).catch(function (e) {
+        return { ok: false, msg: (e && e.message) || '拉取失败，请检查网络' };
+      });
+    },
+
     /* 拉取 BaaS 配置覆盖本机（用户端启动时调用） */
     syncToLocal: function () {
       var self = this;
@@ -420,6 +461,93 @@
       container.appendChild(el('div', { class: 'cs-row' }, [keyInput]));
       container.appendChild(el('div', { class: 'cs-row' }, [testBtn, saveBtn, syncBtn]));
       container.appendChild(el('p', { class: 'cs-meta', style: 'margin-top:8px' }, ['使用前需在 Supabase 新建项目并执行建表 SQL（config / users / waf_logs）。']));
+
+      /* ---------- 注册用户列表（实时拉取，云端不落盘） ---------- */
+      if (Bridge._skTimer) { clearInterval(Bridge._skTimer); Bridge._skTimer = null; }
+      var SEC_KEY = 'sbServiceKey';
+      var skInput = el('input', { type: 'password', placeholder: 'service_role 密钥（粘贴后仅加密存于本机）', style: 'width:100%;padding:10px;border:1px solid #e2e8f0;border-radius:10px;margin:4px 0;box-sizing:border-box' });
+      var skStatus = el('p', { class: 'cs-meta', style: 'color:#64748b;font-size:11px' });
+      var userBox = el('div', { style: 'overflow-x:auto' });
+      var skSaveBtn = el('button', { class: 'cs-btn cs-btn-outline cs-btn-sm', style: 'margin-right:8px' }, ['保存密钥']);
+      var skClearBtn = el('button', { class: 'cs-btn cs-btn-outline cs-btn-sm', style: 'margin-right:8px' }, ['清除密钥']);
+      var pullBtn = el('button', { class: 'cs-btn cs-btn-primary cs-btn-sm', style: 'margin-right:8px' }, ['🔄 拉取用户']);
+      var autoLabel = el('label', { style: 'font-size:11px;color:#64748b;margin-left:10px;cursor:pointer' });
+      var autoChk = el('input', { type: 'checkbox', style: 'vertical-align:-2px;margin-right:4px' });
+      autoLabel.appendChild(autoChk);
+      autoLabel.appendChild(document.createTextNode('每 60 秒自动刷新'));
+
+      function fmtDT(v) { return v ? new Date(v).toLocaleString() : '—'; }
+      function renderUsersTable(users) {
+        userBox.innerHTML = '';
+        var head = el('tr', {}, [
+          el('th', {}, ['邮箱']), el('th', {}, ['注册时间']), el('th', {}, ['最近登录']), el('th', {}, ['状态'])
+        ]);
+        var rows = users.map(function (u) {
+          var confirmed = !!(u.email_confirmed_at || u.confirmed_at || (u.identities && u.identities.length));
+          return el('tr', {}, [
+            el('td', {}, [String(u.email || u.phone || u.id || '-')]),
+            el('td', {}, [fmtDT(u.created_at)]),
+            el('td', {}, [fmtDT(u.last_sign_in_at)]),
+            el('td', {}, [confirmed ? '✅ 已确认' : '⏳ 未确认'])
+          ]);
+        });
+        userBox.appendChild(el('table', { class: 'cs-table' }, [
+          el('thead', {}, [head]),
+          el('tbody', {}, rows.length ? rows : [el('tr', {}, [el('td', { colspan: '4', style: 'text-align:center;padding:16px;color:#94a3b8' }, ['暂无注册用户'])])])
+        ]));
+      }
+      function pullUsers() {
+        skStatus.style.color = '#64748b';
+        skStatus.textContent = '拉取中…';
+        self.fetchAuthUsers(skInput.value.trim()).then(function (r) {
+          if (!r.ok) { skStatus.style.color = '#dc2626'; skStatus.textContent = '❌ ' + r.msg; return; }
+          skStatus.style.color = '#16a34a';
+          skStatus.textContent = '✅ 共 ' + r.users.length + ' 位注册用户 · 更新于 ' + new Date().toLocaleTimeString();
+          renderUsersTable(r.users);
+        });
+      }
+      skSaveBtn.addEventListener('click', function () {
+        var cs = global.CloudShield;
+        if (!cs || !cs.Channel) { skStatus.style.color = '#dc2626'; skStatus.textContent = '❌ 加密通道不可用'; return; }
+        if (!skInput.value.trim()) { skStatus.style.color = '#dc2626'; skStatus.textContent = '❌ 请先粘贴密钥'; return; }
+        cs.Channel.write(SEC_KEY, { key: skInput.value.trim() }).then(function () {
+          skStatus.style.color = '#16a34a';
+          skStatus.textContent = '✅ 密钥已加密保存到本机（不进代码/不上云）';
+        }).catch(function () {
+          skStatus.style.color = '#dc2626'; skStatus.textContent = '❌ 保存失败';
+        });
+      });
+      skClearBtn.addEventListener('click', function () {
+        skInput.value = '';
+        var cs = global.CloudShield;
+        if (cs && cs.Channel) cs.Channel.write(SEC_KEY, {}).catch(function () {});
+        skStatus.style.color = '#64748b';
+        skStatus.textContent = '已清除本机保存的密钥';
+      });
+      pullBtn.addEventListener('click', pullUsers);
+      autoChk.addEventListener('change', function () {
+        if (Bridge._skTimer) { clearInterval(Bridge._skTimer); Bridge._skTimer = null; }
+        if (autoChk.checked) { Bridge._skTimer = setInterval(pullUsers, 60000); pullUsers(); }
+      });
+
+      container.appendChild(el('div', { style: 'border-top:1px dashed #e2e8f0;margin-top:14px' }, []));
+      container.appendChild(el('h3', {}, ['👥 注册用户列表（实时）']));
+      container.appendChild(el('p', { class: 'cs-meta', style: 'font-size:11px;color:#64748b' }, ['实时读取 Supabase 注册用户（邮箱/注册时间/最近登录/确认状态），不在云端额外存储。密钥取自 Supabase 控制台 → Project Settings → API Keys → service_role。']));
+      container.appendChild(skInput);
+      container.appendChild(el('div', { class: 'cs-row' }, [skSaveBtn, skClearBtn, pullBtn, autoLabel]));
+      container.appendChild(skStatus);
+      container.appendChild(userBox);
+
+      /* 预填已保存密钥；已保存过则打开面板即自动拉取一次 */
+      var csG = global.CloudShield;
+      if (csG && csG.Channel) {
+        csG.Channel.read(SEC_KEY).then(function (v) {
+          if (v && v.key) {
+            skInput.value = v.key;
+            pullUsers();
+          }
+        }).catch(function () {});
+      }
     }
   };
 
