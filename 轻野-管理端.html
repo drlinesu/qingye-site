@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex,nofollow">
+<title>轻野 · 云盾 — 管理端</title>
+<style>
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: linear-gradient(160deg, #c9d6c9, #e6dcc8 45%, #d4b896);
+    font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  }
+  /* 保护外壳：页面本体不含任何管理数据与逻辑，
+     全部内容仅在四因子验证通过后由 云盾.js 在内存中解密渲染 */
+  .guard-tip {
+    position: fixed; left: 0; right: 0; bottom: 14px;
+    text-align: center; color: rgba(61, 79, 61, .4);
+    font-size: 11px; letter-spacing: .12em; pointer-events: none;
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+<div id="csGate"></div>
+<div class="guard-tip">轻野 · 云盾 加密管理端 — 未授权访问将被拒绝并记录</div>
+<script>window.__CS_ADMIN__ = true;</script>
+<link rel="preconnect" href="https://unpkg.com" crossorigin>
+<script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
+<script src="轻野-云盾.js?v=202610171603" defer></script>
+<script src="轻野-桥接.js?v=202610171603" defer></script>
+<script src="轻野-捐赠.js?v=202610171603" defer></script>
+<script src="轻野-云仓.js?v=202610171603" defer></script>
+<noscript>管理端需要启用 JavaScript 才能运行安全验证。</noscript>
+</body>
+</html>
