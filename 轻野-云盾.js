@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿/* ============================================================
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/* ============================================================
  * 轻野 · 云盾 (Light Wild · Cloud Shield)
  * 客户端安全网关 —— 纯浏览器原生 API 实现（零后端、零依赖、免费）
  * 功能：邮箱验证登入 / 接口防刷 / WAF / 证书认证 / 管理端MFA / 数据加密 / 云端储存 / 独立管理端
@@ -513,6 +513,26 @@
       Store.json('smsCodes', codes);
       return self._afterVerified(email);
     },
+    // 邮箱+密码登录（注册时已设置过密码的用户；后端不可用时提示走验证码登录）
+    loginPassword: function (email, password) {
+      var self = this;
+      var rl = RateLimit.check('login');
+      if (!rl.ok) return Promise.reject(new Error('登录尝试过于频繁，请 ' + rl.remain + ' 秒后重试'));
+      if (!email) return Promise.reject(new Error('请输入邮箱'));
+      if (!password) return Promise.reject(new Error('请输入密码'));
+      var waf = Waf.check(email);
+      if (!waf.ok) { Waf.logAttack(email, waf.reason); return Promise.reject(new Error(waf.reason)); }
+      if (!global.QYBridge || typeof global.QYBridge.signInPassword !== 'function') {
+        return Promise.reject(new Error('密码登录暂不可用，请使用验证码登录'));
+      }
+      return global.QYBridge.signInPassword(email, password).then(function (r) {
+        if (!r || !r.ok) {
+          if (r && r.code === 'unavailable') throw new Error('认证服务暂不可用，请使用验证码登录');
+          throw new Error((r && r.msg) || '邮箱或密码不正确');
+        }
+        return self._afterVerified(email);
+      });
+    },
     /* 云端 OTP 校验共用：成功后清码并建立会话 */
     _verifyCloud: function (email, code, rec, codes, otpType) {
       var self = this;
@@ -794,11 +814,13 @@
     },
     renderUserForm: function (form) {
       var self = this;
-      var mode = 'login'; // 'login' = 邮箱验证码登录（无需密码）；'register' = 设置密码注册
+      var mode = 'login'; // 'login' = 邮箱验证码登录；'pwd' = 邮箱+密码登录；'register' = 设置密码注册
       var tabWrap = el('div', { style: 'display:flex;gap:8px;margin-bottom:12px' });
       var tabLogin = el('button', { type: 'button', class: 'cs-btn cs-btn-sm', style: 'flex:1' });
+      var tabPwd = el('button', { type: 'button', class: 'cs-btn cs-btn-sm', style: 'flex:1' });
       var tabReg = el('button', { type: 'button', class: 'cs-btn cs-btn-sm', style: 'flex:1' });
       tabWrap.appendChild(tabLogin);
+      tabWrap.appendChild(tabPwd);
       tabWrap.appendChild(tabReg);
 
       var fields = el('div');
@@ -827,8 +849,10 @@
         msg.textContent = ''; msg.className = 'cs-msg';
         fields.innerHTML = '';
         tabLogin.className = 'cs-btn cs-btn-sm cs-btn-primary';
+        tabPwd.className = 'cs-btn cs-btn-sm cs-btn-outline';
         tabReg.className = 'cs-btn cs-btn-sm cs-btn-outline';
         tabLogin.textContent = '验证码登录';
+        tabPwd.textContent = '密码登录';
         tabReg.textContent = '注册新账号';
 
         var emailInput = el('input', { type: 'email', placeholder: '请输入邮箱', id: 'csEmail' });
@@ -881,8 +905,10 @@
         msg.textContent = ''; msg.className = 'cs-msg';
         fields.innerHTML = '';
         tabLogin.className = 'cs-btn cs-btn-sm cs-btn-outline';
+        tabPwd.className = 'cs-btn cs-btn-sm cs-btn-outline';
         tabReg.className = 'cs-btn cs-btn-sm cs-btn-primary';
         tabLogin.textContent = '验证码登录';
+        tabPwd.textContent = '密码登录';
         tabReg.textContent = '注册新账号';
 
         var emailInput = el('input', { type: 'email', placeholder: '邮箱（用于接收验证码）', id: 'csRegEmail' });
@@ -941,7 +967,49 @@
         fields.appendChild(el('div', { class: 'cs-row' }, [regBtn]));
       }
 
+      /* ---------- 密码登录模式：邮箱 + 密码（注册时已设置过密码的用户） ---------- */
+      function renderPasswordLogin() {
+        mode = 'pwd';
+        msg.textContent = ''; msg.className = 'cs-msg';
+        fields.innerHTML = '';
+        tabLogin.className = 'cs-btn cs-btn-sm cs-btn-outline';
+        tabPwd.className = 'cs-btn cs-btn-sm cs-btn-primary';
+        tabReg.className = 'cs-btn cs-btn-sm cs-btn-outline';
+        tabLogin.textContent = '验证码登录';
+        tabPwd.textContent = '密码登录';
+        tabReg.textContent = '注册新账号';
+
+        var emailInput = el('input', { type: 'email', placeholder: '请输入邮箱', id: 'csPwdEmail' });
+        var pwdInput = el('input', { type: 'password', placeholder: '请输入密码', id: 'csPwd' });
+        var loginBtn = el('button', { type: 'button', class: 'cs-btn cs-btn-primary', id: 'csPwdLoginBtn' }, ['登 录']);
+        var tip = el('div', { class: 'cs-msg' }, ['首次使用？请先切换到「注册新账号」设置密码，或使用「验证码登录」。']);
+
+        var submit = function () {
+          if (loginBtn.disabled) return;
+          loginBtn.disabled = true;
+          loginBtn.classList.add('cs-btn-loading');
+          msg.className = 'cs-msg'; msg.textContent = '';
+          Auth.loginPassword(emailInput.value.trim(), pwdInput.value).then(function () {
+            self.unlock();
+          }).catch(function (e) {
+            loginBtn.disabled = false;
+            loginBtn.classList.remove('cs-btn-loading');
+            failMsg(e);
+          });
+        };
+        loginBtn.onclick = submit;
+        [emailInput, pwdInput].forEach(function (inp) {
+          inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+        });
+
+        fields.appendChild(el('div', { class: 'cs-row' }, [emailInput]));
+        fields.appendChild(el('div', { class: 'cs-row' }, [pwdInput]));
+        fields.appendChild(el('div', { class: 'cs-row' }, [loginBtn]));
+        fields.appendChild(tip);
+      }
+
       tabLogin.onclick = renderLogin;
+      tabPwd.onclick = renderPasswordLogin;
       tabReg.onclick = renderRegister;
       renderLogin();
     },
