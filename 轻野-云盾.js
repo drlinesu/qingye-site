@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/* ============================================================
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/* ============================================================
  * 轻野 · 云盾 (Light Wild · Cloud Shield)
  * 客户端安全网关 —— 纯浏览器原生 API 实现（零后端、零依赖、免费）
  * 功能：邮箱验证登入 / 接口防刷 / WAF / 证书认证 / 管理端MFA / 数据加密 / 云端储存 / 独立管理端
@@ -1489,6 +1489,7 @@
       '.cs-userbar{position:sticky;top:0;z-index:10000;background:#2d3f2d;color:#fff;padding:8px 16px;display:flex;align-items:center;gap:10px;font-size:12px;flex-wrap:wrap;animation:csFadeIn .3s ease both}',
       '.cs-userbar .cs-btn{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.22)}',
       '.cs-userbar .cs-btn:hover:not(:disabled){background:rgba(255,255,255,.24)}',
+      '@media(max-width:600px){.cs-userbar{padding:7px 10px;gap:6px;font-size:11.5px;flex-wrap:nowrap}.cs-userbar>span:first-child{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cs-userbar .cs-btn{padding:5px 9px;font-size:11px;flex:none}}',
       '.cs-overlay{position:fixed;inset:0;z-index:999998;background:rgba(61,79,61,.5);display:flex;align-items:center;justify-content:center;padding:20px;animation:csFadeIn .2s ease both}',
       '.cs-modal{background:rgba(255,255,255,0.92);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.6);border-radius:18px;padding:28px;max-width:460px;width:100%;box-shadow:0 20px 50px rgba(61,79,61,.2);animation:csModalIn .3s cubic-bezier(.22,1,.36,1) both}',
       '.cs-modal h3{font-size:18px;font-weight:800;margin-bottom:12px}',
