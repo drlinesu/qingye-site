@@ -311,11 +311,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610190100" defer></script>
-<script src="轻野-桥接.js?v=202610190100" defer></script>
-<script src="轻野-启程.js?v=202610190100" defer></script>
-<script src="轻野-捐赠.js?v=202610190100" defer></script>
-<script src="轻野-云仓.js?v=202610190100" defer></script>
+<script src="轻野-云盾.js?v=202610190117" defer></script>
+<script src="轻野-桥接.js?v=202610190117" defer></script>
+<script src="轻野-启程.js?v=202610190117" defer></script>
+<script src="轻野-捐赠.js?v=202610190117" defer></script>
+<script src="轻野-云仓.js?v=202610190117" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -4604,6 +4604,7 @@ function renderWalkRow(s){
     <span style="background:${crowdColor};color:#fff;font-size:10px;padding:1px 6px;border-radius:4px;white-space:nowrap">${crowdTxt}</span>
   </div>
   ${walkVisualBar(s)}
+  <div class="spPics" style="margin-top:5px"><img src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=${encodeURIComponent("Scenic travel photo of "+s.n+", "+(_scenicCityCur||"China")+", China. "+String(s.ter||"")+" "+String(s.d||"")+". Realistic landscape photography, natural light, vivid colors, popular aesthetic, high quality")}&image_size=landscape_4_3" loading="lazy" decoding="async" alt="${s.n} 样片" title="${s.n} · AI 意境示意（非实景照片），真实照片见 📷 弹层与下方平台直达" style="width:100%;height:120px;object-fit:cover;display:block;border-radius:6px;background:#f1f5f9;border:1px solid #e2e8f0" onerror="this.parentNode.style.display='none'"></div>
   </div>`;
 }
 /* AI 漫行分析头：综合今日天气、未来7天趋势、黄金昏时间、风力与海岸地形给建议 */
@@ -6312,6 +6313,7 @@ function renderScenicRow(s){
   const btnId="photoGuideBtn_"+s.name;
   const param=scenicSpotParam(s);
   const visualBar=scenicVisualBar(s);
+  const _picPrompt=encodeURIComponent("Scenic travel photo of "+s.name+", "+(_scenicCityCur||"China")+", China. "+String(s.desc||"")+". Realistic landscape photography, natural light, vivid colors, popular aesthetic, high quality");
   return `<div style="margin-bottom:6px">
   <div class="sp-row" style="display:flex;align-items:center;gap:8px;background:${bg};border:1px solid ${border};border-radius:8px 8px 0 0;padding:7px 10px;font-size:12.5px;cursor:pointer" title="点击在地图上定位" onclick="focusScenic(${s.coords[0]},${s.coords[1]})">
     <span style="font-size:18px">${s.emoji}</span>
@@ -6324,9 +6326,10 @@ function renderScenicRow(s){
     <span style="background:${tagBg};color:#fff;font-size:10px;padding:1px 6px;border-radius:4px;white-space:nowrap">${tagTxt}</span>
   </div>
   ${visualBar}
+  <div class="spPics" style="margin-top:5px"><img src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=${_picPrompt}&image_size=landscape_4_3" loading="lazy" decoding="async" alt="${s.name} 样片" title="${s.name} · AI 意境示意（非实景照片），真实照片见 📷 弹层与下方平台直达" style="width:100%;height:120px;object-fit:cover;display:block;border-radius:6px;background:#f1f5f9;border:1px solid #e2e8f0" onerror="this.parentNode.style.display='none'"></div>
   </div>`;
 }
-let _lastScenicCity="",_cityWeather=null,_cityWeatherKey="",_cityWeatherPending=false,_cityWeatherTriedAt=0;
+let _lastScenicCity="",_scenicCityCur="",_cityWeather=null,_cityWeatherKey="",_cityWeatherPending=false,_cityWeatherTriedAt=0;
 /* 根据景点列表的第一个坐标 fetch 目的地天气，缓存到 _cityWeather */
 async function ensureCityWeather(list){
   if(!list||!list.length)return null;
@@ -6434,6 +6437,7 @@ function renderScenicGuide(city){
   const el=$("scenicGuide");const lk=$("scenicLinks");
   if(!city){if(_lastScenicCity){el.innerHTML='<div style="font-size:12.5px;color:var(--muted)">填写目的地或在上方搜索任意城市，自动展示当地自然景观、游乐园、水族馆、博物馆等，参考抖音/小红书/B站同城真实推荐</div>';lk.innerHTML='';if(window._scenicMarks){window._scenicMarks.forEach(m=>{try{window._quickMap&&window._quickMap.removeLayer(m)}catch(e){}});window._scenicMarks=null;}_lastScenicCity="";}requestRiskInfo(null);renderDisasterAlert();return;}
   const name=city[0];
+  _scenicCityCur=name; // 供 renderScenicRow/renderWalkRow 构造样片 prompt
   if(name===_lastScenicCity)return;
   _lastScenicCity=name;
   // 获取自然景观（SCENIC_SPOTS 或 SCENIC_REGIONS 兜底）
@@ -6531,7 +6535,7 @@ function renderScenicGuide(city){
       ${filterViews}
       ${walkBlock}
       ${astroBlock}
-      <div style="margin-top:6px;font-size:11.5px;color:#64748b">💡 点击景点可在地图上定位；📷按钮查看AI出片时间建议</div>`;
+      <div style="margin-top:6px;font-size:11.5px;color:#64748b">💡 点击景点可在地图上定位；📷按钮查看AI出片时间建议；景点样片为 AI 意境示意（非实景照片），真实照片与视频请点 📷 弹层或下方平台直达</div>`;
   }
   // 外跳社交链接
   const kw=encodeURIComponent(name);
