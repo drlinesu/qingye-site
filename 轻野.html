@@ -311,11 +311,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610180119" defer></script>
-<script src="轻野-桥接.js?v=202610180119" defer></script>
-<script src="轻野-启程.js?v=202610180119" defer></script>
-<script src="轻野-捐赠.js?v=202610180119" defer></script>
-<script src="轻野-云仓.js?v=202610180119" defer></script>
+<script src="轻野-云盾.js?v=202610181206" defer></script>
+<script src="轻野-桥接.js?v=202610181206" defer></script>
+<script src="轻野-启程.js?v=202610181206" defer></script>
+<script src="轻野-捐赠.js?v=202610181206" defer></script>
+<script src="轻野-云仓.js?v=202610181206" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -474,6 +474,7 @@
         <label class="switch"><input type="checkbox" id="comboOn"><span></span></label>
         <span style="font-size:13px;font-weight:600">启用组合方案对比</span>
         <button class="btn btn-g btn-sm" style="margin-left:auto" onclick="autoRecommend()">🎯 智能推荐</button>
+        <button class="btn btn-g btn-sm" onclick="queryMoreCombos()">🔍 更多方案</button>
       </div>
       <div class="frow">
         <div><label class="fl">中转城市</label><input type="text" id="comboCity" list="cityList" placeholder="如：南京（可留空点智能推荐）"></div>
@@ -1503,6 +1504,154 @@ function recommendCombosC(A,B,res){
   if(sig)_rcCache={sig,list};
   return list;
 }
+/* ================= 多段方案（泛化 evalCombo，支持任意段数；不修改原 2 段函数） ================= */
+function evalMultiCombo(A,cities,modes,res){
+  // cities=[C1,C2,...] 中转城市，modes=[m1,m2,...,mN] 每段方式；路径 A→C1→...→B
+  const p=res.p,legs=res.legs,cars=res.cars,n=modes.length;
+  const segs=[];
+  let totalFare=0,taxes=0,cityRide=0,totalH=0,totalKm=0;
+  const farePool={rail:0,flight:0,bus:0,taxi:0,drive:0};
+  const warns=[];
+  for(let i=0;i<n;i++){
+    const from=i===0?A:cities[i-1];
+    const to=i===n-1?B:cities[i];
+    const md=modes[i];
+    const km=segKm(from,to,md);
+    const f=segFare(md,km,p,cars);
+    farePool[md]+=f.fare;
+    totalFare+=f.fare; taxes+=f.tax; totalKm+=km;
+    const h=legHours(md,km);
+    totalH+=h;
+    segs.push({from:from[0],to:to[0],md,km,fare:f.fare,h});
+    // 段级警告（与 evalCombo 同口径）
+    if(km>300&&md==="taxi")warns.push(`第${i+1}段打车超 300km，费用偏高，建议改高铁`);
+    if(md==="flight"&&km<350)warns.push(`第${i+1}段航程过短，班次可能很少`);
+    if(km>600&&md==="drive")warns.push(`第${i+1}段自驾超 600km，长途疲劳，建议公共交通`);
+  }
+  // 换乘时间：连续自驾 15 分钟，其余 40 分钟/次
+  for(let i=0;i<n-1;i++){
+    totalH += (modes[i]==="drive"&&modes[i+1]==="drive")?15/60:40/60;
+  }
+  // 市内接驳：起点 + 终点（非自驾/打车段才需要机场/车站接驳）
+  if(modes[0]!=="taxi"&&modes[0]!=="drive")cityRide+=cars*cityTaxiFare(modes[0]==="flight"?state.rates.airportCityKm:state.rates.stationCityKm);
+  if(modes[n-1]!=="taxi"&&modes[n-1]!=="drive")cityRide+=cars*cityTaxiFare(modes[n-1]==="flight"?state.rates.airportCityKm:state.rates.stationCityKm);
+  cityRide*=legs;
+  // 优惠券：按各方式票面分别套用（与 evalCombo 同口径）
+  let saveTotal=0;const used=[];
+  ["rail","flight","bus","drive"].forEach(md=>{
+    if(farePool[md]<=0)return;
+    const cp=pickCoupons(md);
+    const s1=applyPct(cp.pct,farePool[md]);
+    const s2=applyAmt(cp.amt,farePool[md]-s1.save,p);
+    [s1,s2].forEach(s=>{if(s.save>0){saveTotal+=s.save;used.push(s);}});
+  });
+  const taxiPool=farePool.taxi+cityRide+res.onTaxi;
+  const tpc=pickCoupons("taxi");
+  const t1=applyPct(tpc.pct,taxiPool);
+  const t2=applyAmt(tpc.amt,taxiPool-t1.save,cars);
+  [t1,t2].forEach(s=>{if(s.save>0){saveTotal+=s.save;used.push(s);}});
+  // 租车费：任意段为自驾则算落地租车（按停留天数）
+  const hasDrive=modes.some(m=>m==="drive");
+  const rent=hasDrive?state.rates.rentDay*(res.stay||1):0;
+  const direct=res.great*state.rates.circRoad;
+  const detour=direct>0?totalKm/direct:1;
+  if(detour>1.6)warns.push(`总绕行明显（约为直达里程的 ${Math.round(detour*100)}%）`);
+  const total=totalFare+taxes+cityRide+rent+res.onTaxi+res.stayCost-saveTotal;
+  return {cities,modes,segs,totalFare,taxes,city:cityRide,rent,total,per:total/p,h:totalH,days:Math.max(1,Math.ceil(totalH/16))*legs,saveTotal,used,warns,detour,segCount:n};
+}
+function multiToMode(r,res){
+  const names=r.segs.map(s=>SHORT[s.md]);
+  const detRows=r.segs.map((s,i)=>[`段${i+1}｜${s.from} → ${s.to}（${MODES[s.md].name}）`,s.fare]);
+  if(r.taxes)detRows.push(["机建+燃油附加",r.taxes]);
+  if(r.rent)detRows.push(["租车费（落地自驾，按天）",r.rent]);
+  detRows.push(["市内接驳打车（机场/车站·滴滴快车）",r.city]);
+  if(res.onTaxi)detRows.push([`当地市内打车（${res.stay}天）`,res.onTaxi]);
+  if(res.stayCost)detRows.push(["住宿+餐饮（可关）",res.stayCost]);
+  r.used.forEach(u=>detRows.push(["🎫 已抵扣："+u.label,-u.save]));
+  const via=r.segs[0].to; // 第一个中转城市名（兼容 routeVerify 的单城市查询）
+  const fullVia=r.segs.slice(0,-1).map(s=>s.to).join(" → ");
+  return {key:"combo",name:names.join("+"),icon:r.segCount>2?"🔗🔗":"🔗",color:"#7c3aed",soft:"var(--violet-soft)",
+    ticket:r.totalFare,taxes:r.taxes,city:r.city,onTaxi:res.onTaxi,stay:res.stayCost,saves:[],
+    total:r.total,per:r.total/res.p,save:r.saveTotal,
+    h:r.h,days:r.days,via,
+    m1:r.modes[0],m2:r.modes[r.modes.length-1], // 兼容 modeCard/ticketChannel 的段引用
+    note:`经 ${fullVia} 中转 · 全程约 ${Math.round(r.segs.reduce((a,s)=>a+s.km,0))}km · ${r.segCount} 段联运`,
+    warns:r.warns,detRows,segCount:r.segCount};
+}
+/* ================= 3 段方案（启发式：在最优 2 段基础上插入中转；不修改原 2 段算法） ================= */
+function nearestCityToPoint(lat,lng,excludeNames){
+  // 找距离 (lat,lng) 最近且不在排除列表的城市
+  let best=null,bestD=Infinity;
+  for(const c of CITIES){
+    if(excludeNames.includes(c[0]))continue;
+    const d=hav([lat,lng],[c[1],c[2]]);
+    if(d<bestD){bestD=d;best=c;}
+  }
+  return best;
+}
+function recommendTriCombos(A,B,res){
+  const two=recommendCombosC(A,B,res).slice(0,8);
+  if(!two.length)return [];
+  const out=[];
+  const seen=new Set();
+  for(const r of two){
+    // 选绕行占比更大的那段插入中转
+    const ratio1=r.k1/(r.k1+r.k2), ratio2=r.k2/(r.k1+r.k2);
+    const insertSeg=ratio1>=ratio2?1:2; // 1=A→C, 2=C→B
+    let C1,C2,newModes;
+    if(insertSeg===1){
+      // 在 A→C 中间插入 Cx
+      const midLat=(A[1]+r.C[1])/2, midLng=(A[2]+r.C[2])/2;
+      const Cx=nearestCityToPoint(midLat,midLng,[A[0],r.C[0],B[0]]);
+      if(!Cx)continue;
+      C1=Cx; C2=r.C; newModes=[r.m1,r.m1,r.m2]; // 新段复用原方式（可优化为尝试多种）
+    }else{
+      const midLat=(r.C[1]+B[1])/2, midLng=(r.C[2]+B[2])/2;
+      const Cx=nearestCityToPoint(midLat,midLng,[A[0],r.C[0],B[0]]);
+      if(!Cx)continue;
+      C1=r.C; C2=Cx; newModes=[r.m1,r.m2,r.m2];
+    }
+    // 尝试 2-3 种方式组合提升质量
+    const modeOpts=[
+      newModes,
+      [newModes[0],"rail",newModes[2]],
+      [newModes[0],"flight",newModes[2]],
+    ];
+    for(const modes of modeOpts){
+      // 段级硬校验
+      const path=[A,C1,C2,B];
+      let ok=true;
+      for(let i=0;i<3;i++){
+        if(!segViable(modes[i],path[i],path[i+1],segKm(path[i],path[i+1],modes[i]))){ok=false;break;}
+      }
+      if(!ok)continue;
+      const rr=evalMultiCombo(A,[C1,C2],modes,res);
+      if(rr.detour>2.8)continue;
+      // 仅保留比原 2 段更优（更省钱 或 更省时且费用不超 10%）
+      if(rr.total>r.total*1.1)continue;
+      const key=modes.join(",")+"|"+C1[0]+"|"+C2[0];
+      if(seen.has(key))continue;
+      seen.add(key);
+      rr._base=r; // 关联原 2 段方案供排序参考
+      out.push(rr);
+    }
+  }
+  out.sort((a,b)=>a.total-b.total);
+  return out.slice(0,5);
+}
+let _triCache={sig:null,list:null};
+function recommendTriCombosC(A,B,res){
+  const sig=recSig(A,B,res);
+  if(sig&&_triCache.sig===sig&&_triCache.list)return _triCache.list;
+  const list=recommendTriCombos(A,B,res);
+  if(sig)_triCache={sig,list};
+  return list;
+}
+let _showMoreCombos=false;
+function queryMoreCombos(){
+  _showMoreCombos=true;
+  if(window._flushForm)window._flushForm(); else apply(false);
+}
 function transferCandidatesC(A,B){
   const k=A[0]+"|"+B[0];
   if(_tcCache[k])return _tcCache[k];
@@ -1930,62 +2079,90 @@ function render(){
   // 组合联运卡片（在 cheapest/fastest 计算后生成，供推荐徽标判断）
   let comboHtml="";
   if(state.combo.enabled&&CA&&CB){
-    // 生成所有推荐方案的 mode 卡（带标签）
-    const comboCards=topCombos.map((r,i)=>{
+    // 证实等级：2段检查两段，多段检查所有段
+    const segVerifiedAll=(modes,path)=>{
+      let cnt=0;
+      for(let i=0;i<modes.length;i++){
+        if(segVerified(modes[i],path[i][0],path[i+1][0])===true)cnt++;
+      }
+      return cnt===modes.length?2:cnt>0?1:0;
+    };
+    // 生成 2 段推荐方案卡片
+    const twoCards=topCombos.map((r,i)=>{
       const mode=comboToMode(r,res);
-      // 给前几张加推荐徽标
-      const tag=[];
-      if(i===0)tag.push({t:"💰 最省钱",c:"var(--teal)",bg:"var(--teal-soft)"});
-      if(i===1)tag.push({t:"⚡ 最省时",c:"var(--blue)",bg:"var(--blue-soft)"});
-      if(i===2)tag.push({t:"🛣️ 绕行最少",c:"#ea580c",bg:"#fff7ed"});
-      if(r.detour<1.2)tag.push({t:"顺路",c:"#16a34a",bg:"#f0fdf4"});
-      if(r.saveTotal>100)tag.push({t:"🎫 券省¥"+fmt(r.saveTotal),c:"var(--violet)",bg:"var(--violet-soft)"});
-      // 合并标签到 note
       mode.note=`经 ${r.C[0]} 中转 · 段1约${Math.round(r.k1)}km · 段2约${Math.round(r.k2)}km · 绕行${Math.round(r.detour*100)}%${r.saveTotal>0?` · 券省¥${fmt(r.saveTotal)}`:""}`;
-      mode._tags=tag;
+      mode._raw=r; mode._segCount=2; mode._v=segVerifiedAll([r.m1,r.m2],[CA,r.C,CB]);
+      mode._hasBus=r.m1==="bus"||r.m2==="bus";
       return mode;
     });
-    // 按「是否含滴滴打车段 × 是否含大巴段」四组细分；分组仅影响展示顺序，不改变任何计算
-    const grpOf=r=>(r.m1==="taxi"||r.m2==="taxi"?(r.m1==="bus"||r.m2==="bus"?"db":"dd"):(r.m1==="bus"||r.m2==="bus"?"nb":"nd"));
-    // 新增：证实优先排序（不改 recommendCombos 内部算法，仅展示层排序；证实=官方离线时刻表收录直达段）
-    const comboV=r=>{
-      const v1=segVerified(r.m1,CA[0],r.C[0]),v2=segVerified(r.m2,r.C[0],CB[0]);
-      if(v1===true&&v2===true)return 2;
-      if(v1===true||v2===true)return 1;
-      return 0;
-    };
-    const pairs=topCombos.map((r,i)=>({r,card:comboCards[i]})).sort((a,b)=>comboV(b.r)-comboV(a.r));
-    const top5=pairs.slice(0,5),rest=pairs.slice(5);
-    const G={nd:[],nb:[],dd:[],db:[]};
-    top5.forEach(p=>G[grpOf(p.r)].push(p.card));
-    // 用户手动选的也归入对应分组（如果不在推荐列表中），并做交通可行性复核
+    // 若用户点了「更多方案」，追加 3 段方案
+    const triCards=_showMoreCombos?recommendTriCombosC(CA,CB,res).map(r=>{
+      const mode=multiToMode(r,res);
+      mode._raw=r; mode._segCount=3; mode._v=segVerifiedAll(r.modes,[CA].concat(r.cities).concat([CB]));
+      mode._hasBus=r.modes.some(m=>m==="bus");
+      return mode;
+    }):[];
+    // 用户手动方案（不在推荐列表时加入）
+    let userCard=null;
     if(CC){
-      const userCombo=comboToMode(evalCombo(CA,CC,CB,state.combo.m1,state.combo.m2,res),res);
+      const userRaw=evalCombo(CA,CC,CB,state.combo.m1,state.combo.m2,res);
+      userCard=comboToMode(userRaw,res);
       const fw=comboFeasWarns(CA,CC,CB,state.combo.m1,state.combo.m2);
-      if(fw.length)userCombo.warns=userCombo.warns.concat(fw);
+      if(fw.length)userCard.warns=userCard.warns.concat(fw);
       const exists=topCombos.some(r=>r.m1===state.combo.m1&&r.m2===state.combo.m2&&r.C[0]===CC[0]);
       if(!exists){
-        userCombo.note=userCombo.note+" · 👤 手动方案";
-        userCombo._tags=[{t:"👤 你的方案",c:"var(--violet)",bg:"var(--violet-soft)"}];
-        G[grpOf(state.combo)].push(userCombo);
+        userCard.note=userCard.note+" · 👤 手动方案";
+        userCard._tags=[{t:"👤 你的方案",c:"var(--violet)",bg:"var(--violet-soft)"}];
       }
-      const k1=segKm(CA,CC,state.combo.m1),k2=segKm(CC,CB,state.combo.m2);
-      cn.innerHTML=`📍 段1 ${CA[0]}→${CC[0]} ≈<b>${Math.round(k1)}km</b> · 段2 ${CC[0]}→${CB[0]} ≈<b>${Math.round(k2)}km</b> · 合计 <b>${Math.round(k1+k2)}km</b>（直达约 ${Math.round(res.great*state.rates.circRoad)}km）<br><span style="font-size:11px;color:var(--muted)">下方已按「证实优先」排序，展示前 ${top5.length} 种 · 按「无滴滴/含滴滴 × 无大巴/含大巴」分组${rest.length?`，其余 ${rest.length} 种已折叠`:''}</span>`;
-    }else{
-      cn.innerHTML=`📍 直达约 ${Math.round(res.great*state.rates.circRoad)}km · 已按「证实优先」排序，展示前 ${top5.length} 种组合方案${rest.length?`，其余 ${rest.length} 种已折叠`:''}`;
+      userCard._raw=userRaw; userCard._segCount=2; userCard._v=segVerifiedAll([state.combo.m1,state.combo.m2],[CA,CC,CB]);
+      userCard._hasBus=state.combo.m1==="bus"||state.combo.m2==="bus";
     }
-    const gnd=G.nd.length?`<div class="grpnote">🚄 无滴滴 · 无大巴（不含打车/大巴段）</div>`+G.nd.map((m,i)=>modeCard(m,"nd"+i)).join(""):"";
-    const gnb=G.nb.length?`<div class="grpnote">🚌 无滴滴 · 含大巴（含大巴段 · 不含打车）</div>`+G.nb.map((m,i)=>modeCard(m,"nb"+i)).join(""):"";
-    const gdd=G.dd.length?`<div class="grpnote">🚕 含滴滴 · 无大巴（含打车段）</div>`+G.dd.map((m,i)=>modeCard(m,"dd"+i)).join(""):"";
-    const gdb=G.db.length?`<div class="grpnote">🚌🚕 含滴滴 · 含大巴（含打车段+大巴段）</div>`+G.db.map((m,i)=>modeCard(m,"db"+i)).join(""):"";
-    const restHtml=rest.length?`<details style="margin-top:10px">
-      <summary style="cursor:pointer;padding:8px 12px;background:#f8fafc;border:1px solid var(--line);border-radius:8px;font-size:13px;color:#475569;user-select:none;list-style:none;display:flex;justify-content:space-between;align-items:center">📋 还有 ${rest.length} 个方案（点击展开）<span style="font-size:11px">▼</span></summary>
-      <div style="margin-top:8px">${rest.map((p,i)=>modeCard(p.card,"rest"+i)).join("")}</div>
-    </details>`:"";
-    comboHtml=`<div class="subhead">🔗 组合联运方案 <span class="tag">多段交通 · 各段套用对应优惠券 · 已按证实优先排序</span></div>`
-      +((G.nd.length||G.nb.length||G.dd.length||G.db.length)?gnd+gnb+gdd+gdb:'<div class="warn">⚠ 未找到可行的组合方案（沿途无合适中转城市，或起讫点交通条件不满足）</div>')
-      +restHtml;
+    const allCards=twoCards.concat(triCards).concat(userCard?[userCard]:[]);
+    // 交通方式联动：匹配用户当前 comboM1/comboM2 选择的方案同级优先
+    const uM1=state.combo.m1, uM2=state.combo.m2;
+    const matchScore=m=>{
+      if(m._segCount===2){const r=m._raw;return (r.m1===uM1?1:0)+(r.m2===uM2?1:0);}
+      const modes=m._raw.modes;return (modes[0]===uM1?1:0)+(modes[modes.length-1]===uM2?1:0);
+    };
+    if(!allCards.length){
+      comboHtml=`<div class="subhead">🔗 组合联运方案 <span class="tag">多段交通 · 各段套券</span></div><div class="warn">⚠ 未找到可行的组合方案（沿途无合适中转城市，或起讫点交通条件不满足）</div>`;
+    }else{
+      // 排序：①最省钱固定第1 ②证实优先 ③无大巴优先 ④综合评分（费用+时长归一化）
+      const cheapIdx=allCards.reduce((mi,m,i)=>m.total<allCards[mi].total?i:mi,0);
+      const cheapCard=allCards.splice(cheapIdx,1)[0];
+      const minT=Math.min(...allCards.map(m=>m.total)), minH=Math.min(...allCards.map(m=>m.h));
+      allCards.sort((a,b)=>{
+        if(b._v!==a._v)return b._v-a._v;
+        const ma=matchScore(a),mb=matchScore(b);
+        if(ma!==mb)return mb-ma; // 匹配用户选择方式优先
+        if(a._hasBus!==b._hasBus)return a._hasBus?1:-1; // 无大巴优先
+        const sa=a.total/minT+a.h/minH, sb=b.total/minT+b.h/minH;
+        return sa-sb;
+      });
+      allCards.unshift(cheapCard);
+      // 推荐徽标
+      cheapCard._tags=(cheapCard._tags||[]).concat([{t:"💰 最省钱",c:"var(--teal)",bg:"var(--teal-soft)"}]);
+      const fastIdx=allCards.reduce((mi,m,i)=>i>0&&m.h<allCards[mi].h?i:mi,1);
+      if(fastIdx>0)allCards[fastIdx]._tags=(allCards[fastIdx]._tags||[]).concat([{t:"⚡ 最省时",c:"var(--blue)",bg:"var(--blue-soft)"}]);
+      const topN=6;
+      const visible=allCards.slice(0,topN), rest=allCards.slice(topN);
+      // 提示文字
+      if(CC){
+        const k1=segKm(CA,CC,state.combo.m1),k2=segKm(CC,CB,state.combo.m2);
+        cn.innerHTML=`📍 段1 ${CA[0]}→${CC[0]} ≈<b>${Math.round(k1)}km</b> · 段2 ${CC[0]}→${CB[0]} ≈<b>${Math.round(k2)}km</b> · 合计 <b>${Math.round(k1+k2)}km</b>（直达约 ${Math.round(res.great*state.rates.circRoad)}km）<br><span style="font-size:11px;color:var(--muted)">已按「证实优先」排序，展示前 ${visible.length} 种${rest.length?`，其余 ${rest.length} 种已折叠`:''}${triCards.length?` · 含 ${triCards.length} 个 3 段方案`:''}</span>`;
+      }else{
+        cn.innerHTML=`📍 直达约 ${Math.round(res.great*state.rates.circRoad)}km · 已按「证实优先」排序，展示前 ${visible.length} 种组合方案${rest.length?`，其余 ${rest.length} 种已折叠`:''}${triCards.length?` · 含 ${triCards.length} 个 3 段方案`:''}`;
+      }
+      const restHtml=rest.length?`<details style="margin-top:10px">
+        <summary style="cursor:pointer;padding:8px 12px;background:#f8fafc;border:1px solid var(--line);border-radius:8px;font-size:13px;color:#475569;user-select:none;list-style:none;display:flex;justify-content:space-between;align-items:center">📋 还有 ${rest.length} 个方案（点击展开）<span style="font-size:11px">▼</span></summary>
+        <div style="margin-top:8px">${rest.map((m,i)=>modeCard(m,"crest"+i)).join("")}</div>
+      </details>`:"";
+      comboHtml=`<div class="subhead">🔗 组合联运方案 <span class="tag">多段交通 · 各段套券 · 证实优先 · 无大巴优先</span></div>`
+        +visible.map((m,i)=>modeCard(m,"cvis"+i)).join("")
+        +restHtml;
+    }
   }else{
+    _showMoreCombos=false;
     cn.textContent="启用后：出发 → 中转 → 目的地 两段组合（如空铁联运、打车接驳），自动推荐多种方案，各段享受对应优惠券抵扣";
   }
 
