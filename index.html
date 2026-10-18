@@ -311,11 +311,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610190010" defer></script>
-<script src="轻野-桥接.js?v=202610190010" defer></script>
-<script src="轻野-启程.js?v=202610190010" defer></script>
-<script src="轻野-捐赠.js?v=202610190010" defer></script>
-<script src="轻野-云仓.js?v=202610190010" defer></script>
+<script src="轻野-云盾.js?v=202610190100" defer></script>
+<script src="轻野-桥接.js?v=202610190100" defer></script>
+<script src="轻野-启程.js?v=202610190100" defer></script>
+<script src="轻野-捐赠.js?v=202610190100" defer></script>
+<script src="轻野-云仓.js?v=202610190100" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -476,29 +476,9 @@
         <button class="btn btn-g btn-sm" style="margin-left:auto" onclick="autoRecommend()">🎯 智能推荐</button>
         <button class="btn btn-g btn-sm" onclick="queryMoreCombos()">🔍 更多方案</button>
       </div>
-      <div class="frow">
-        <div><label class="fl">中转城市</label><input type="text" id="comboCity" list="cityList" placeholder="如：南京（可留空点智能推荐）"></div>
-      </div>
-      <div class="frow">
-        <div><label class="fl">段1：出发 → 中转</label>
-          <select id="comboM1">
-            <option value="rail">🚄 高铁</option>
-            <option value="flight">✈️ 飞机</option>
-            <option value="bus">🚌 大巴</option>
-            <option value="taxi">🚕 打车/网约车</option>
-            <option value="drive">🚗 自驾/租车</option>
-          </select>
-        </div>
-        <div><label class="fl">段2：中转 → 目的</label>
-          <select id="comboM2">
-            <option value="taxi">🚕 打车/网约车</option>
-            <option value="rail">🚄 高铁</option>
-            <option value="flight">✈️ 飞机</option>
-            <option value="bus">🚌 大巴</option>
-            <option value="drive">🚗 租车自驾</option>
-          </select>
-        </div>
-      </div>
+      <div id="comboStops"></div>
+      <div style="margin:0 0 8px"><button type="button" class="btn btn-g btn-sm" id="comboAddStop">＋ 添加中转站（支持多段联运）</button></div>
+      <div id="comboModes"></div>
       <div id="aiXferInline" style="margin:0 0 8px;padding:0"></div>
       <div class="dist-note" id="comboNote">启用后：出发 → 中转 → 目的地 两段组合（如空铁联运、打车接驳），同样享受优惠券抵扣</div>
       <div id="cityCombosBody"></div>
@@ -956,7 +936,7 @@ async function updateFuelPrice(province,silent){
 }
 let state=loadState();
 function loadState(){
-  const defCombo={enabled:false,city:"",m1:"rail",m2:"taxi"};
+  const defCombo={enabled:false,city:"",m1:"rail",m2:"flight",cities:[],modes:[]};
   const defNear={enabled:false,city:"",m1:"rail",m2:"taxi"};
   try{ const s=JSON.parse(localStorage.getItem(LS)); if(s&&s.rates){ s.rates={...DEFAULTS,...s.rates}; if(!s.combo)s.combo={...defCombo}; if(!s.near)s.near={...defNear}; if(!s.form.tollFree)s.form.tollFree=false; if(!s.form.transOnly)s.form.transOnly=false; if(!("studentTicket" in s.form))s.form.studentTicket=false; if(typeof s.scenicCity!=="string")s.scenicCity=""; if(!s.form.goSeg)s.form.goSeg="mid"; if(!s.form.backSeg)s.form.backSeg="mid"; if(!("goDate"in s.form))s.form.goDate=""; if(!("backDate"in s.form))s.form.backDate=""; if(!s._actualFare)s._actualFare={}; return s; } }catch(e){}
   return {rates:{...DEFAULTS},coupons:[],combo:{...defCombo},near:{...defNear},scenicCity:"",form:{from:"北京",to:"上海",people:1,stayDays:0,taxiKmDay:0,tripType:"round",railClass:"2",railType:"G",studentTicket:false,distOverride:"",tollFree:false,transOnly:false,goDate:"",goSeg:"mid",backDate:"",backSeg:"mid"},_actualFare:{}};
@@ -1466,22 +1446,91 @@ function recommendCombos(A,B,res){ // 全网算法：城市图 2 段搜索 → �
   }
   return picked.slice(0,10);
 }
+/* ================= 组合联运 · 多中转站链式配置 =================
+   cities/modes 为权威数据；city/m1/m2 自动同步为兼容镜像（旧逻辑全部继续有效） */
+const COMBO_MODE_OPTS=[["rail","🚄 高铁"],["flight","✈️ 飞机"],["bus","🚌 大巴"],["taxi","🚕 打车/网约车"],["drive","🚗 自驾/租车"]];
+function comboChainGet(){ // 读取当前链：cities=中转城市名数组（含空行），modes=每段方式（长度=城市数+1；默认高铁，末段默认飞机）
+  const cb=state.combo||{};
+  let cities=Array.isArray(cb.cities)?cb.cities.slice():[];
+  if(!cities.length&&(cb.city||"").trim())cities=[(cb.city||"").trim()];
+  const nSeg=Math.max(1,cities.length+1);
+  let modes=Array.isArray(cb.modes)?cb.modes.slice():[];
+  for(let i=0;i<nSeg;i++)if(!MODES[modes[i]])modes[i]=(i===nSeg-1&&nSeg>=2)?"flight":"rail"; // 默认以高铁/飞机为主
+  return {cities,modes:modes.slice(0,nSeg)};
+}
+function comboChainSet(cities,modes){ // 写入链 + 同步镜像 + 重建 UI
+  const cb=state.combo;
+  cb.cities=cities.slice();
+  cb.modes=(modes||[]).slice(0,cities.length+1);
+  while(cb.modes.length<cities.length+1)cb.modes.push(cb.modes.length===cities.length?"flight":"rail");
+  cb.city=cb.cities[0]||"";cb.m1=cb.modes[0]||"rail";cb.m2=cb.modes[1]||"flight";
+  renderComboChainUI();
+}
+function renderComboModesUI(){ // 仅重建「每段方式」下拉（每次 render 调用，标签随输入实时刷新）
+  const mbox=$("comboModes");if(!mbox)return;
+  const {cities,modes}=comboChainGet();
+  const stops=cities.length?cities:[""];
+  const names=["出发"].concat(stops.map(c=>c||"中转")).concat(["目的"]);
+  mbox.innerHTML=`<div class="frow">`+modes.map((m,i)=>{
+    const sid=i===0?' id="comboM1"':i===1?' id="comboM2"':""; // 保留首两行 id 兼容旧引用
+    const opts=COMBO_MODE_OPTS.map(([v,t])=>`<option value="${v}"${v===m?" selected":""}>${t}</option>`).join("");
+    return `<div><label class="fl">段${i+1}：${names[i]} → ${names[i+1]}</label><select${sid} data-seg="${i}">${opts}</select></div>`;
+  }).join("")+`</div>`;
+}
+function renderComboChainUI(){ // 重建中转站行（结构变化时才调用，避免打断输入）
+  const box=$("comboStops");if(box){
+    const {cities}=comboChainGet();
+    const stops=cities.length?cities:[""];
+    box.innerHTML=stops.map((c,i)=>`<div class="frow" style="align-items:flex-end">
+      <div style="flex:1"><label class="fl">中转城市${stops.length>1?" "+(i+1):""}</label><input type="text"${i===0?' id="comboCity"':""} data-stop="${i}" list="cityList" value="${String(c||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;")}" placeholder="如：南京（可留空点智能推荐）"></div>
+      ${stops.length>1?`<button type="button" class="btn btn-g btn-sm" data-del-stop="${i}" title="删除该中转站" style="flex:0 0 auto;margin-bottom:1px">✕</button>`:""}
+    </div>`).join("");
+  }
+  renderComboModesUI();
+}
+function readComboChainInputs(){ // DOM → state（cities/modes 权威 + 镜像 city/m1/m2 供旧逻辑）
+  const stops=[...document.querySelectorAll("#comboStops input[data-stop]")].map(x=>x.value.trim());
+  const modes=[...document.querySelectorAll("#comboModes select[data-seg]")].map(x=>x.value);
+  const cb=state.combo;
+  cb.cities=stops;cb.modes=modes;
+  cb.city=stops[0]||"";cb.m1=modes[0]||"rail";cb.m2=modes[1]||modes[0]||"flight";
+}
 function autoRecommend(){
   window._flushForm&&window._flushForm(); // 先落盘未防抖完的输入
   const A=getCity(state.form.from),B=getCity(state.form.to);
   if(!A||!B){toast("请先填写有效的出发/目的城市");return;}
-  const best=(aiTopTwo(A,B,compute())[0])||null; // 取综合科学评分（费用+时长+绕行+可行性+官方证实）最优，而非单纯费用榜第一
+  const res=compute();
+  const validStops=comboChainGet().cities.filter(c=>(c||"").trim());
+  // 用户已配置 ≥2 个中转站 → 智能推荐 3 段方案（证实优先，同级取费用最低）
+  if(validStops.length>=2){
+    const tri=recommendTriCombosC(A,B,res);
+    if(tri.length){
+      const vScore=r=>{const path=[A].concat(r.cities).concat([B]);let v=0;r.modes.forEach((m,i)=>{if(segVerified(m,path[i][0],path[i+1][0])===true)v++;});return v;};
+      const best=tri.slice().sort((a,b)=>(vScore(b)-vScore(a))||(a.total-b.total))[0];
+      state.combo.enabled=true;$("comboOn").checked=true;
+      comboChainSet(best.cities.map(c=>c[0]),best.modes.slice());
+      save();render();
+      toast(`全网优选 ${best.modes.length} 段联运：经 ${best.cities.map(c=>c[0]).join("、")}，约 ¥${fmt(best.total)}${vScore(best)===best.modes.length?"（全程已证实）":""}`);
+      return;
+    }
+    toast("未找到比 2 段更优的多段方案，已按单中转推荐");
+  }
+  // 证实优先：全程两段均被官方时刻表收录的方案优先（取费用最低）；无则回退综合评分最优
+  const pool=recommendCombosC(A,B,res);
+  const vPool=pool.filter(r=>segVerified(r.m1,A[0],r.C[0])===true&&segVerified(r.m2,r.C[0],B[0])===true);
+  const best=vPool.length?vPool[0]:((aiTopTwo(A,B,res)[0])||null); // aiTopTwo 综合科学评分（费用+时长+绕行+可行性+官方证实）
   if(!best){toast("全网搜索未找到可达中转方案，直达或陆路可能更优");return;}
-  state.combo.enabled=true;state.combo.city=best.city;state.combo.m1=best.m1;state.combo.m2=best.m2;
-  $("comboOn").checked=true;$("comboCity").value=best.city;$("comboM1").value=best.m1;$("comboM2").value=best.m2;
+  const bc=best.city||(best.C&&best.C[0])||"";
+  state.combo.enabled=true;$("comboOn").checked=true;
+  comboChainSet([bc],[best.m1,best.m2]);
   save();render();
-  toast(`全网优选：${SHORT[best.m1]}+${SHORT[best.m2]} 经 ${best.city} 中转，约 ¥${fmt(best.total)}`);
+  toast(`全网优选：${SHORT[best.m1]}+${SHORT[best.m2]} 经 ${bc} 中转，约 ¥${fmt(best.total)}${vPool.length?"（全程已证实）":""}`);
 }
 function applyCombo(i){
   window._flushForm&&window._flushForm();
   const r=(window._topCombos||[])[i];if(!r)return;
-  state.combo.enabled=true;state.combo.city=r.C[0];state.combo.m1=r.m1;state.combo.m2=r.m2;
-  $("comboOn").checked=true;$("comboCity").value=r.C[0];$("comboM1").value=r.m1;$("comboM2").value=r.m2;
+  state.combo.enabled=true;$("comboOn").checked=true;
+  comboChainSet([r.C[0]],[r.m1,r.m2]);
   save();render();toast(`已应用：${SHORT[r.m1]}+${SHORT[r.m2]} 经 ${r.C[0]}`);
 }
 
@@ -1810,8 +1859,8 @@ function aiXferSetSort(mode){
 function applyAiXfer(i){
   window._flushForm&&window._flushForm();
   const r=(window._aiTopTwo||[])[i];if(!r)return;
-  state.combo.enabled=true;state.combo.city=r.city;state.combo.m1=r.m1;state.combo.m2=r.m2;
-  $("comboOn").checked=true;$("comboCity").value=r.city;$("comboM1").value=r.m1;$("comboM2").value=r.m2;
+  state.combo.enabled=true;$("comboOn").checked=true;
+  comboChainSet([r.city],[r.m1,r.m2]);
   save();render();
   toast(`已应用：${SHORT[r.m1]}+${SHORT[r.m2]} 经 ${r.city}（${r.label}）`);
 }
@@ -1892,8 +1941,8 @@ function applyCityCombo(kind,i){
   const list=window._cityCombos||[];
   const sorted=kind==='price'?[...list].sort((a,b)=>a.total-b.total).slice(0,3):[...list].sort((a,b)=>a.h-b.h).slice(0,3);
   const r=sorted[i];if(!r)return;
-  state.combo.enabled=true;state.combo.city=r.C[0];state.combo.m1=r.m1;state.combo.m2=r.m2;
-  $("comboOn").checked=true;$("comboCity").value=r.C[0];$("comboM1").value=r.m1;$("comboM2").value=r.m2;
+  state.combo.enabled=true;$("comboOn").checked=true;
+  comboChainSet([r.C[0]],[r.m1,r.m2]);
   save();render();
   toast(`已应用：${SHORT[r.m1]}+${SHORT[r.m2]} 经 ${r.C[0]}（${kind==='price'?'省钱':'省时'}）`);
 }
@@ -2032,20 +2081,27 @@ function render(){
 
   // 组合联运（多段交通，各段分别套用优惠券）
   let combos=[],topCombos=[];
-  const CA=A,CB=B,CC=getCity(state.combo.city); // 复用上方 A/B 查询结果，避免重复解析城市
+  const CA=A,CB=B;
+  // 多中转链：过滤空行 → 解析城市对象；modes 取前（有效中转数+1）段
+  const _ch=comboChainGet();
+  const _chainCities=_ch.cities.filter(c=>(c||"").trim()).map(n=>getCity(n)).filter(Boolean);
+  const _chainModes=_ch.modes.slice(0,_chainCities.length+1);
+  const CC=_chainCities[0]||null; // 兼容原 CC 语义（第一有效中转城市）
   const cn=$("comboNote");
+  renderComboModesUI(); // 段标签随当前输入实时刷新（不重建中转输入行，避免打断打字）
   if(state.combo.enabled&&CA&&CB){
     topCombos=recommendCombosC(CA,CB,res);
     window._topCombos=topCombos;
-    if(CC){
+    if(_chainCities.length>=2){
+      // 多中转链：泛化 N 段计算
+      combos=[multiToMode(evalMultiCombo(CA,_chainCities,_chainModes,res),res)];
+    }else if(CC){
       combos=[comboToMode(evalCombo(CA,CC,CB,state.combo.m1,state.combo.m2,res),res)];
-      const k1=segKm(CA,CC,state.combo.m1),k2=segKm(CC,CB,state.combo.m2);
-      cn.innerHTML=`📍 段1 ${CA[0]}→${CC[0]} ≈<b>${Math.round(k1)}km</b> · 段2 ${CC[0]}→${CB[0]} ≈<b>${Math.round(k2)}km</b> · 合计 <b>${Math.round(k1+k2)}km</b>（直达约 ${Math.round(res.great*state.rates.circRoad)}km）`;
     }else{
       cn.innerHTML="⚠ 中转城市未识别，请从下拉列表选择";
     }
   }else{
-    cn.textContent="启用后：出发 → 中转 → 目的地 两段组合（如空铁联运、打车接驳），同样享受优惠券抵扣";
+    cn.textContent="启用后：出发 → 中转 → 目的地 多段组合（如空铁联运、打车接驳），同样享受优惠券抵扣";
   }
 
   // 指定中转城市的多方案对比（零侵入：只要用户填了中转城市就展示，不依赖 comboOn 开关）
@@ -2105,9 +2161,20 @@ function render(){
       const vt=vTag(mode._v);if(vt)mode._tags=[vt];
       return mode;
     }):[];
-    // 用户手动方案（不在推荐列表时加入）
+    // 用户手动方案（多中转链；不在推荐列表时加入）
     let userCard=null;
-    if(CC){
+    if(_chainCities.length>=2){
+      // 多中转链（≥2 个中转站）：泛化 N 段计算
+      const userRaw=evalMultiCombo(CA,_chainCities,_chainModes,res);
+      userCard=multiToMode(userRaw,res);
+      const path=[CA].concat(_chainCities).concat([CB]);
+      _chainModes.forEach((md,i)=>{const km=segKm(path[i],path[i+1],md);if(!segViable(md,path[i],path[i+1],km))userCard.warns.push(`⚠ 第${i+1}段 ${path[i][0]}→${path[i+1][0]} 乘「${MODES[md].name}」不可行（设施/距离不满足）`);});
+      userCard.note=userCard.note+" · 👤 手动方案";
+      userCard._tags=[{t:"👤 你的方案",c:"var(--violet)",bg:"var(--violet-soft)"}];
+      userCard._raw=userRaw; userCard._segCount=_chainModes.length; userCard._v=segVerifiedAll(_chainModes,path);
+      userCard._hasBus=_chainModes.some(m=>m==="bus");
+      const uvt=vTag(userCard._v);if(uvt)userCard._tags=userCard._tags.concat([uvt]);
+    }else if(CC){
       const userRaw=evalCombo(CA,CC,CB,state.combo.m1,state.combo.m2,res);
       userCard=comboToMode(userRaw,res);
       const fw=comboFeasWarns(CA,CC,CB,state.combo.m1,state.combo.m2);
@@ -2154,7 +2221,11 @@ function render(){
       const topN=6;
       const visible=allCards.slice(0,topN), rest=allCards.slice(topN);
       // 提示文字
-      if(CC){
+      if(_chainCities.length>=2){
+        const path=[CA].concat(_chainCities).concat([CB]);
+        const kms=path.slice(0,-1).map((p,i)=>Math.round(segKm(p,path[i+1],_chainModes[i])));
+        cn.innerHTML=`📍 手动链：${path.map(p=>p[0]).join(" → ")} · 各段约 ${kms.join(" + ")}km · 合计 <b>${kms.reduce((a,b)=>a+b,0)}km</b>（直达约 ${Math.round(res.great*state.rates.circRoad)}km）<br><span style="font-size:11px;color:var(--muted)">已按「证实优先」排序${vNote}，展示前 ${visible.length} 种${rest.length?`，其余 ${rest.length} 种已折叠`:''}${triCards.length?` · 含 ${triCards.length} 个 3 段方案`:''}</span>`;
+      }else if(CC){
         const k1=segKm(CA,CC,state.combo.m1),k2=segKm(CC,CB,state.combo.m2);
         cn.innerHTML=`📍 段1 ${CA[0]}→${CC[0]} ≈<b>${Math.round(k1)}km</b> · 段2 ${CC[0]}→${CB[0]} ≈<b>${Math.round(k2)}km</b> · 合计 <b>${Math.round(k1+k2)}km</b>（直达约 ${Math.round(res.great*state.rates.circRoad)}km）<br><span style="font-size:11px;color:var(--muted)">已按「证实优先」排序${vNote}，展示前 ${visible.length} 种${rest.length?`，其余 ${rest.length} 种已折叠`:''}${triCards.length?` · 含 ${triCards.length} 个 3 段方案`:''}</span>`;
       }else{
@@ -2702,8 +2773,7 @@ function bindForm(){
   document.querySelectorAll("#backSeg button").forEach(b=>b.classList.toggle("on",b.dataset.v===(f.backSeg||"mid")));
   const btr=$("backTimeRow");if(btr)btr.style.display=f.tripType==="round"?"flex":"none";
   const cb=state.combo||{};
-  $("comboOn").checked=!!cb.enabled;$("comboCity").value=cb.city||"";
-  $("comboM1").value=cb.m1||"rail";$("comboM2").value=cb.m2||"taxi";
+  $("comboOn").checked=!!cb.enabled;renderComboChainUI();
   const nr=state.near||{};
   $("nearOn").checked=!!nr.enabled;$("nearCity").value=nr.city||"";
   $("nearM1").value=nr.m1||"rail";$("nearM2").value=nr.m2||"taxi";
@@ -2715,9 +2785,9 @@ function formEvents(){
   const sig=()=>{
     const tt=document.querySelector("#tripTypeSeg button.on");
     const gs=document.querySelector("#goSeg button.on"),bs=document.querySelector("#backSeg button.on");
-    return ["fromCity","toCity","people","stayDays","taxiKmDay","distOverride","railClass","railType","comboCity","nearCity","goDate","backDate"].map(id=>$(id).value).join("|")
+    return ["fromCity","toCity","people","stayDays","taxiKmDay","distOverride","railClass","railType","nearCity","goDate","backDate"].map(id=>$(id).value).join("|")
       +"#"+(tt?tt.dataset.v:"")+"#"+$("tollFree").checked+"#"+$("transOnly").checked+"#"+$("studentTicket").checked
-      +"#"+$("comboOn").checked+"|"+$("comboM1").value+"|"+$("comboM2").value
+      +"#"+$("comboOn").checked+"|"+[...document.querySelectorAll("#comboStops input[data-stop]")].map(x=>x.value).join(",")+"$"+[...document.querySelectorAll("#comboModes select[data-seg]")].map(x=>x.value).join(",")
       +"#"+$("nearOn").checked+"|"+$("nearM1").value+"|"+$("nearM2").value
       +"#"+(gs?gs.dataset.v:"")+"|"+(bs?bs.dataset.v:"");
   };
@@ -2729,11 +2799,33 @@ function formEvents(){
   };
   const upd=()=>{ clearTimeout(updTm); updTm=setTimeout(()=>apply(false),120); };
   window._flushForm=()=>{ if(updTm){clearTimeout(updTm);updTm=null;} apply(true); };
-  ["fromCity","toCity","people","stayDays","taxiKmDay","distOverride","railClass","railType","comboCity","nearCity","goDate","backDate"].forEach(id=>{
+  ["fromCity","toCity","people","stayDays","taxiKmDay","distOverride","railClass","railType","nearCity","goDate","backDate"].forEach(id=>{
     $(id).addEventListener("input",upd);
   });
-  ["railClass","railType","comboM1","comboM2","comboOn","nearM1","nearM2","nearOn","tollFree","transOnly","studentTicket"].forEach(id=>{
+  ["railClass","railType","comboOn","nearM1","nearM2","nearOn","tollFree","transOnly","studentTicket"].forEach(id=>{
     $(id).addEventListener("change",()=>apply(false));
+  });
+  // 组合联运 · 动态中转链：容器级事件委托（行/下拉是动态重建的，不能绑在元素上）
+  $("comboStops").addEventListener("input",e=>{if(e.target.matches("input[data-stop]"))upd();});
+  $("comboModes").addEventListener("change",e=>{if(e.target.matches("select[data-seg]"))apply(false);});
+  $("comboStops").addEventListener("click",e=>{
+    const b=e.target.closest("[data-del-stop]");if(!b)return;
+    e.preventDefault();
+    readComboChainInputs();
+    const ch=comboChainGet();
+    const i=+b.dataset.delStop;
+    ch.cities.splice(i,1);
+    ch.modes.splice(Math.min(i+1,ch.modes.length-1),1); // 删除中转站 → 合并其前后两段，丢弃后一段的方式
+    comboChainSet(ch.cities,ch.modes);
+    apply(false);
+  });
+  $("comboAddStop").addEventListener("click",()=>{
+    readComboChainInputs();
+    const ch=comboChainGet();
+    if(ch.cities.length>=4){toast("最多支持 4 个中转站（5 段联运）");return;}
+    ch.cities.push("");
+    comboChainSet(ch.cities,ch.modes);
+    apply(false);
   });
   document.querySelectorAll("#tripTypeSeg button").forEach(b=>b.addEventListener("click",()=>{
     document.querySelectorAll("#tripTypeSeg button").forEach(x=>x.classList.remove("on"));
@@ -2764,8 +2856,8 @@ function readForm(){
   f.goDate=$("goDate").value||"";f.backDate=$("backDate").value||"";
   const gs=document.querySelector("#goSeg button.on");f.goSeg=gs?gs.dataset.v:"mid";
   const bs=document.querySelector("#backSeg button.on");f.backSeg=bs?bs.dataset.v:"mid";
-  state.combo.enabled=$("comboOn").checked;state.combo.city=$("comboCity").value;
-  state.combo.m1=$("comboM1").value;state.combo.m2=$("comboM2").value;
+  state.combo.enabled=$("comboOn").checked;
+  readComboChainInputs(); // 动态中转链 → state.combo.cities/modes + 镜像 city/m1/m2
   if(!state.near)state.near={enabled:false,city:"",m1:"rail",m2:"taxi"};
   state.near.enabled=$("nearOn").checked;state.near.city=$("nearCity").value;
   state.near.m1=$("nearM1").value;state.near.m2=$("nearM2").value;
