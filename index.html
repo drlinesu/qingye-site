@@ -254,6 +254,8 @@
     /* —— 轻旅行推荐：行字号加大、实拍图 2 列放大，符合手机阅读尺寸 —— */
     .sp-row{font-size:13.5px!important}
     .wikiImgs{grid-template-columns:repeat(2,1fr)}
+    /* 样片在手机上降低高度，避免一屏全是图，加快滚动浏览 */
+    .spPics img{height:88px!important}
     .mode .mhead{padding:12px 13px;gap:10px}
     .mico{width:34px;height:34px;font-size:18px}
     .mname{font-size:13.5px}
@@ -311,11 +313,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610190117" defer></script>
-<script src="轻野-桥接.js?v=202610190117" defer></script>
-<script src="轻野-启程.js?v=202610190117" defer></script>
-<script src="轻野-捐赠.js?v=202610190117" defer></script>
-<script src="轻野-云仓.js?v=202610190117" defer></script>
+<script src="轻野-云盾.js?v=202610190141" defer></script>
+<script src="轻野-桥接.js?v=202610190141" defer></script>
+<script src="轻野-启程.js?v=202610190141" defer></script>
+<script src="轻野-捐赠.js?v=202610190141" defer></script>
+<script src="轻野-云仓.js?v=202610190141" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -4849,7 +4851,7 @@ function buildAstroBlock(cityName,weather,lat,lng){
       <span style="background:#4338ca;color:#e0e7ff;padding:1px 6px;border-radius:4px;font-size:10.5px;font-weight:600">🌗 月相·晴夜 本地算法</span>
       <span style="background:#3730a3;color:#e0e7ff;padding:1px 6px;border-radius:4px;font-size:10.5px;font-weight:600">🔭 天文官网直达</span></div>
     ${hero}
-    <div style="margin-top:7px;background:rgba(255,255,255,.95);border-radius:8px;padding:8px 10px;color:#1e293b">
+    <div style="margin-top:7px;background:rgba(255,255,255,.95);border-radius:8px;padding:8px 10px;color:#1e293b;overflow-x:auto;-webkit-overflow-scrolling:touch">
       <table style="border-collapse:collapse;width:100%;font-size:11.5px">
         <tr style="color:#4338ca;font-size:10.5px"><th style="text-align:left;padding:2px 6px">日期</th><th style="text-align:left;padding:2px 6px">月相</th><th style="text-align:left;padding:2px 6px">指数</th><th style="text-align:left;padding:2px 6px">天气</th><th style="text-align:left;padding:2px 6px">月光窗口</th></tr>
         ${rows.join("")}
@@ -6715,15 +6717,24 @@ document.addEventListener("focusin",e=>{
 });
 if(state.rates.amapKey)loadAmap();
 /* 默认即免Key地图：首屏渲染后自动初始化，用户打开页面直接看到地图，无需配Key/点tab */
+/* 手机提速：地图在视口下方，进入视口前 400px 才初始化（Leaflet/瓦片不抢首屏带宽）；桌面布局地图靠上，几乎立即触发 */
 (function(){
   const A=getCity(state.form.from),B=getCity(state.form.to);
   if(!(A&&B))return;
-  ensureLeaflet(()=>{
+  const boot=()=>ensureLeaflet(()=>{
     if(!window._quickMap)initQuickMap(A,B);
     renderScenicGuide(scenicTarget(B));
     renderHotelMarks(_lastHotelPois,_hotelCity);
     setTimeout(()=>{try{if(window._quickMap)window._quickMap.invalidateSize();}catch(e){}},120);
   });
+  const pane=$("quickPane");
+  if(pane&&"IntersectionObserver" in window){
+    const io=new IntersectionObserver(es=>{
+      if(es.some(e=>e.isIntersecting)){io.disconnect();boot();}
+    },{rootMargin:"400px 0px"});
+    io.observe(pane);
+    /* 兜底：Leaflet 静默预取已在 idlePre 里跑过；用户点底图 tab/切换源时 switchMap/setQuickSource 会自行初始化 */
+  }else boot();
 })();
 
 /* 油价自动更新：页面加载时检查，超过24h未更新则静默拉取 */
@@ -6760,20 +6771,21 @@ document.querySelectorAll("details.card").forEach(d=>{
   });
 });
 /* 轻旅行展开时提升为 main 直接子元素、跨两列全宽（落在结果/地图下方，不遮挡地图）；收起动画结束后移回左列 */
+/* 手机端为单列 flex 布局且排序依赖 main 子节点 nth-child，移位会破坏排序选择器——仅桌面双列时执行跨列移动 */
 (function(){
   const card=document.getElementById('scenicCard');
   if(!card)return;
   const leftCol=card.parentElement, main=card.closest('main');
+  const isDesktop=()=>window.matchMedia("(min-width:901px)").matches;
   card.addEventListener('toggle',()=>{
     if(card.open){
-      main.appendChild(card);
-      card.classList.add('scenic-wide');
+      if(isDesktop()){main.appendChild(card);card.classList.add('scenic-wide');}
       card.style.scrollMarginTop="10px";
       // 展开后自动滚动到轻旅行版块（先平滑滚动，动画结束后再校正一次位置）
       setTimeout(()=>{ if(card.open)card.scrollIntoView({behavior:"smooth",block:"start"}); },60);
       setTimeout(()=>{ if(card.open)card.scrollIntoView({block:"start"}); },430);
     }else{
-      setTimeout(()=>{ if(!card.open){ leftCol.appendChild(card); card.classList.remove('scenic-wide'); } },400);
+      setTimeout(()=>{ if(!card.open&&card.classList.contains('scenic-wide')){ leftCol.appendChild(card); card.classList.remove('scenic-wide'); } },400);
     }
   });
 })();
