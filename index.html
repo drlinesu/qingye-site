@@ -315,11 +315,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610200025" defer></script>
-<script src="轻野-桥接.js?v=202610200025" defer></script>
-<script src="轻野-启程.js?v=202610200025" defer></script>
-<script src="轻野-捐赠.js?v=202610200025" defer></script>
-<script src="轻野-云仓.js?v=202610200025" defer></script>
+<script src="轻野-云盾.js?v=202610200038" defer></script>
+<script src="轻野-桥接.js?v=202610200038" defer></script>
+<script src="轻野-启程.js?v=202610200038" defer></script>
+<script src="轻野-捐赠.js?v=202610200038" defer></script>
+<script src="轻野-云仓.js?v=202610200038" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -6555,6 +6555,14 @@ function renderScenicGuide(city){
       ${astroBlock}
       <div style="margin-top:6px;font-size:11.5px;color:#64748b">💡 点击景点可在地图上定位；📷按钮查看AI出片时间建议；景点样片为 AI 意境示意（非实景照片），真实照片与视频请点 📷 弹层或下方平台直达</div>`;
   }
+  /* 样片预热：图片接口为异步生成（首访返回占位图，后台生成完成后同 URL 才出真图）。
+     列表一渲染就用隐藏 Image 低优先级错峰预取，提前促发生成并写入浏览器缓存——
+     等用户展开折叠卡/滚动到列表时，图片已生成且命中缓存，秒开 */
+  try{
+    el.querySelectorAll(".spPics img").forEach((im,i)=>{
+      setTimeout(()=>{try{const p=new Image();p.decoding="async";p.fetchPriority="low";p.src=im.src;}catch(e){}},1200+i*150);
+    });
+  }catch(e){}
   // 外跳社交链接
   const kw=encodeURIComponent(name);
   lk.innerHTML=`<a class="btn btn-g btn-sm" href="https://www.douyin.com/search/${encodeURIComponent(name+" 同城 小众景点")}?type=general" target="_blank">🎵 抖音同城 · ${name}小众</a>
@@ -6564,6 +6572,7 @@ function renderScenicGuide(city){
     <a class="btn btn-g btn-sm" href="https://uri.amap.com/search?keyword=${encodeURIComponent(name+" 自然景观")}" target="_blank">🗺️ 高德 · 周边景点</a>`;
   // 地图标记（自然景点 + 漫行点合并）；搜索城市与目的地不同时，地图视野跟随搜索城市
   const scenicMapList=walkList.length?allList.concat(walkList):allList;
+  window._lastScenicMapList=scenicMapList; // 供地图懒加载完成后补标记（列表可能已在空闲期提前渲染）
   renderScenicMap(scenicMapList);
   const scNow=state.scenicCity&&state.scenicCity.trim();
   if(scNow&&window._quickMap&&city&&window._quickMap.getCenter){
@@ -6724,6 +6733,9 @@ let _idleInited=false;
 function idleInit(){
   if(_idleInited)return;_idleInited=true;
   buildCityList();renderCoupons();
+  /* 空闲期提前渲染轻旅行列表（不依赖地图）：列表就绪 + 样片预热提前开始，
+     等用户滚到地图/展开卡片时内容与图片均已备好；renderScenicMap 内部有地图守卫，此时无地图自动跳过 */
+  setTimeout(()=>{try{const B=scenicTarget(getCity(state.form.to));if(B)renderScenicGuide(B);}catch(e){}},800);
 }
 requestAnimationFrame(()=>{requestAnimationFrame(idleInit);}); // 首屏绘制完成后立即补建（约2帧）
 setTimeout(idleInit,300); // 兜底（低端设备 rAF 异常时）
@@ -6740,6 +6752,7 @@ if(state.rates.amapKey)loadAmap();
   const boot=()=>ensureLeaflet(()=>{
     if(!window._quickMap)initQuickMap(A,B);
     renderScenicGuide(scenicTarget(B));
+    if(window._lastScenicMapList)renderScenicMap(window._lastScenicMapList); // 列表若已在空闲期渲染，此处补景点地图标记（内部 _qKey/_lastScenicKey 防重）
     renderHotelMarks(_lastHotelPois,_hotelCity);
     setTimeout(()=>{try{if(window._quickMap)window._quickMap.invalidateSize();}catch(e){}},120);
   });
