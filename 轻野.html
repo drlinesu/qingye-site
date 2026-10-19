@@ -315,11 +315,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610200038" defer></script>
-<script src="轻野-桥接.js?v=202610200038" defer></script>
-<script src="轻野-启程.js?v=202610200038" defer></script>
-<script src="轻野-捐赠.js?v=202610200038" defer></script>
-<script src="轻野-云仓.js?v=202610200038" defer></script>
+<script src="轻野-云盾.js?v=202610200113" defer></script>
+<script src="轻野-桥接.js?v=202610200113" defer></script>
+<script src="轻野-启程.js?v=202610200113" defer></script>
+<script src="轻野-捐赠.js?v=202610200113" defer></script>
+<script src="轻野-云仓.js?v=202610200113" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -1788,6 +1788,7 @@ function aiTopTwo(A,B,res){
       vsDirectH:r.h-directMinH,
       detour:r.detour,
       score:score(r),
+      v:(segVerified(r.m1,A[0],r.C[0])===true?1:0)+(segVerified(r.m2,r.C[0],B[0])===true?1:0), // 段级官方证实计数：0=未证实 / 1=部分 / 2=全程
       note:`经 ${r.C[0]} 中转 · ${SHORT[r.m1]}+${SHORT[r.m2]} · 全程约 ${Math.round((r.k1||0)+(r.k2||0))}km · 换乘约 ${Math.round((r.xfer||0)*60)} 分钟 · 绕行 ${(r.detour||1).toFixed(2)}x${(state.form.goSeg||"mid")!=="mid"?` · 按${({early:"早",mid:"午",late:"晚",night:"夜"})[state.form.goSeg]}时段出发`:""}`
     };
   };
@@ -1829,17 +1830,22 @@ function renderAiXfer(A,B,res){
       items=poolArr.slice(0,5).map((r,i)=>({...r,label:(sortMode==="price"?"💰 费用#":"⚡ 耗时#")+(i+1)}));
       if(!items.length)items=top;
     }
+    // 已证实/未证实分区：主区只展示已证实（至少一段被官方时刻表收录），未证实移入折叠板块；concat 保 applyAiXfer 索引连续
+    const vItems=items.filter(r=>(r.v||0)>0), uItems=items.filter(r=>!((r.v||0)>0));
+    items=vItems.concat(uItems);
     window._aiTopTwo=items;
     const segBtn=(m,ic,lb)=>`<button onclick="aiXferSetSort('${m}')" style="padding:3px 10px;border-radius:999px;border:1px solid var(--line);font-size:11.5px;cursor:pointer;${sortMode===m?'background:#0f766e;color:#fff;font-weight:600':'background:#fff;color:var(--slate)'}">${ic}${lb}</button>`;
     const header=`<div style="font-size:12px;color:var(--slate);margin-bottom:4px;padding:6px 9px;background:#f0fdfa;border-radius:6px">🤖 AI 综合 <b>费用(0.42)+时长(0.33)+绕行(0.10)+可行性(0.15)×官方证实</b> 多维度评分（含换乘复杂度 · 对比直达合理性 · 时段感知），从 <b>全网 ${candN} 城</b> × 多种交通组合中先做「设施+距离+绕行」三重过滤、再挑出 2 个最优方案；费用/时长相近时自动取评分更高者。<br>直达基准：<b style="color:#dc2626">¥${fmt(directMin)}</b> / <b style="color:#2563eb">${directMinH.toFixed(1)}h</b>${bothWorse?' · <span style="color:#d97706;font-weight:600">⚠ 两个中转方案均不如直达，建议直接选直达方案</span>':''}<div style="display:flex;gap:6px;margin-top:8px;align-items:center;flex-wrap:wrap"><span style="font-size:11px;color:var(--slate)">排序筛选：</span>${segBtn("default","🤖 ","AI 推荐")}${segBtn("price","💰 ","按费用")}${segBtn("time","⚡ ","按耗时")}${sortMode!=="default"?`<span style="font-size:11px;color:var(--slate)">（展示前 ${items.length} 条，点「一键应用」生效）</span>`:""}</div></div>`;
     const card=(r,i)=>{
       const cheaper=r.vsDirect<0?`<span style="color:#16a34a;font-weight:600">比直达省 ¥${fmt(-r.vsDirect)}</span>`:r.vsDirect===0?`<span style="color:var(--slate)">与直达持平</span>`:`<span style="color:#d97706">比直达贵 ¥${fmt(r.vsDirect)}</span>`;
       const faster=r.vsDirectH<0?`<span style="color:#16a34a;font-weight:600">省 ${(-r.vsDirectH).toFixed(1)}h</span>`:r.vsDirectH===0?`<span style="color:var(--slate)">与直达持平</span>`:`<span style="color:#d97706">多 ${r.vsDirectH.toFixed(1)}h</span>`;
+      const vB=(r.v||0)>=2?'<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:#dcfce7;color:#16a34a;font-weight:600">✅ 全程已证实</span>':(r.v||0)===1?'<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:#dcfce7;color:#15803d;font-weight:600">✅ 部分已证实</span>':"";
       return `<div style="background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-top:7px">
         <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">
           <b style="color:#0f766e;font-size:13px">${r.label}</b>
           <span style="font-size:13px;font-weight:600">经 ${r.city} 中转</span>
           <span style="font-size:11.5px;color:var(--slate)">（${SHORT[r.m1]}+${SHORT[r.m2]}）</span>
+          ${vB}
           <button class="btn btn-g btn-sm" style="margin-left:auto" onclick="applyAiXfer(${i})">🚀 一键应用</button>
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:5px;font-size:12px">
@@ -1849,7 +1855,9 @@ function renderAiXfer(A,B,res){
         <div style="font-size:11px;color:var(--slate);margin-top:3px">${r.note} · 综合评分 <b style="color:#0f766e">${(r.score*100).toFixed(0)}/100</b></div>
       </div>`;
     };
-    box.innerHTML=header+items.map(card).join("");
+    const vMain=vItems.length?vItems.map(card).join(""):`<div style="color:#d97706;font-size:12px;margin-top:7px">⚠ 本路线暂无时刻表证实的 AI 中转方案——下方独立板块为计算推荐，购票前请查证</div>`;
+    const uDet=uItems.length?`<details${vItems.length?"":" open"} style="margin-top:8px"><summary style="cursor:pointer;padding:6px 10px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;font-size:12px;color:#92400e;font-weight:600;user-select:none;list-style:none;display:flex;justify-content:space-between;align-items:center">⚠ 未证实方案 ${uItems.length} 个（计算推荐 · 购票前请查证）<span style="font-size:11px;font-weight:400">▼</span></summary>${uItems.map((r,i)=>card(r,vItems.length+i)).join("")}</details>`:"";
+    box.innerHTML=header+vMain+uDet;
   }catch(e){
     box.innerHTML=`<div style="color:#d97706;font-size:12px">⚠ AI 推荐生成异常：${e.message||e}</div>`;
   }
@@ -1899,10 +1907,13 @@ function renderCityCombos(A,C,B,res){
     box.innerHTML=`<div style="margin-top:8px;padding:8px 10px;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;font-size:12px;color:#92400e">⚠ 经 ${C[0]} 中转暂无合理方案（可能该城无机场/高铁站，或绕行过大）。可尝试其它中转城市，或点上方「🎯 智能推荐」由 AI 自动挑选</div>`;
     return;
   }
-  const byPrice=[...list].sort((a,b)=>a.total-b.total).slice(0,3);
-  const byTime=[...list].sort((a,b)=>a.h-b.h).slice(0,3);
   const directMin=Math.min(...res.modes.map(m=>m.total));
   const directMinH=Math.min(...res.modes.map(m=>m.h));
+  // 已证实/未证实分区：已证实=无未收录段且至少一段被时刻表收录；各维度证实 Top3 入主区，未证实 Top3 入折叠板块
+  const isV=r=>{const a1=segVerified(r.m1,A[0],r.C[0]),a2=segVerified(r.m2,r.C[0],B[0]);return a1!==false&&a2!==false&&(a1===true||a2===true);};
+  const splitSort=key=>{const s=[...list].sort((a,b)=>a[key]-b[key]);return{v:s.filter(isV).slice(0,3),u:s.filter(r=>!isV(r)).slice(0,3)};};
+  const byPrice=splitSort("total"), byTime=splitSort("h");
+  window._cityCombosDisp={price:byPrice.v.concat(byPrice.u),time:byTime.v.concat(byTime.u)}; // 与展示顺序一致，供 applyCityCombo 按索引取
   const card=(r,i,kind)=>{
     const cheaper=r.total-directMin;
     const faster=r.h-directMinH;
@@ -1930,21 +1941,19 @@ function renderCityCombos(A,C,B,res){
       </div>
     </div>`;
   };
-  box.innerHTML=`<div style="margin-top:8px;padding:7px 10px;background:#f0fdfa;border-radius:6px;font-size:11.5px;color:var(--slate)">📍 经 <b>${C[0]}</b> 中转共找到 <b>${list.length}</b> 个合理方案，按维度分类展示各 Top 3（直达基准：¥${fmt(directMin)} / ${directMinH.toFixed(1)}h）：</div>
-    <div style="margin-top:6px">
-      <div style="font-size:12px;font-weight:600;color:#0f766e;margin-top:6px">💰 省钱方案（按总费用升序）</div>
-      ${byPrice.map((r,i)=>card(r,i,'price')).join("")}
-    </div>
-    <div style="margin-top:6px">
-      <div style="font-size:12px;font-weight:600;color:#0f766e;margin-top:6px">⚡ 省时方案（按总时长升序）</div>
-      ${byTime.map((r,i)=>card(r,i,'time')).join("")}
+  const grp=(g,kind,title)=>`<div style="margin-top:6px">
+      <div style="font-size:12px;font-weight:600;color:#0f766e;margin-top:6px">${title}</div>
+      ${g.v.length?g.v.map((r,i)=>card(r,i,kind)).join(""):'<div style="font-size:11.5px;color:#d97706;margin-top:5px">⚠ 该维度暂无时刻表证实方案</div>'}
+      ${g.u.length?`<details style="margin-top:5px"><summary style="cursor:pointer;padding:4px 9px;background:#fffbeb;border:1px solid #fcd34d;border-radius:7px;font-size:11.5px;color:#92400e;font-weight:600;user-select:none;list-style:none;display:flex;justify-content:space-between;align-items:center">⚠ 未证实方案 ${g.u.length} 个（计算推荐 · 购票前请查证）<span style="font-size:10px;font-weight:400">▼</span></summary>${g.u.map((r,i)=>card(r,g.v.length+i,kind)).join("")}</details>`:""}
     </div>`;
+  box.innerHTML=`<div style="margin-top:8px;padding:7px 10px;background:#f0fdfa;border-radius:6px;font-size:11.5px;color:var(--slate)">📍 经 <b>${C[0]}</b> 中转共找到 <b>${list.length}</b> 个合理方案，按维度分类展示（直达基准：¥${fmt(directMin)} / ${directMinH.toFixed(1)}h）· <b style="color:#16a34a">主区仅展示已证实方案</b>，未证实已折叠：</div>
+    ${grp(byPrice,'price','💰 省钱方案（按总费用升序）')}
+    ${grp(byTime,'time','⚡ 省时方案（按总时长升序）')}`;
 }
 function applyCityCombo(kind,i){
   window._flushForm&&window._flushForm();
-  const list=window._cityCombos||[];
-  const sorted=kind==='price'?[...list].sort((a,b)=>a.total-b.total).slice(0,3):[...list].sort((a,b)=>a.h-b.h).slice(0,3);
-  const r=sorted[i];if(!r)return;
+  const disp=window._cityCombosDisp||{};
+  const r=(disp[kind]||[])[i];if(!r)return;
   state.combo.enabled=true;$("comboOn").checked=true;
   comboChainSet([r.C[0]],[r.m1,r.m2]);
   save();render();
@@ -2021,6 +2030,7 @@ function recommendNear(A,B,res){
     seen.add(k);picked.push(r);
     if(picked.length>=3)break;
   }
+  picked.forEach(r=>{r._v=segVerified(r.m1,A[0],r.C[0])===true?1:0;}); // 主段官方时刻表证实标记（接驳段用户手选，不参与证实）
   return picked;
 }
 function autoNear(){
@@ -2029,7 +2039,7 @@ function autoNear(){
   if(!A||!B){toast("请先填写有效的出发/目的城市");return;}
   const top=recommendNear(A,B,compute());
   if(!top.length){toast("目的地周边 150km 内未找到城镇，请手动填写落地城镇");return;}
-  const best=top[0];
+  const best=top.find(r=>r._v===1)||top[0]; // 优先取已证实方案
   state.near.enabled=true;state.near.city=best.C[0];state.near.m1=best.m1;
   $("nearOn").checked=true;$("nearCity").value=best.C[0];$("nearM1").value=best.m1;
   save();render();
@@ -2217,13 +2227,15 @@ function render(){
       cheapCard._tags=(cheapCard._tags||[]).concat([{t:"💰 最省钱",c:"var(--teal)",bg:"var(--teal-soft)"}]);
       const fastCard=allCards.reduce((fm,m)=>m.h<fm.h?m:fm,allCards[0]);
       if(fastCard!==cheapCard)fastCard._tags=(fastCard._tags||[]).concat([{t:"⚡ 最省时",c:"var(--blue)",bg:"var(--blue-soft)"}]);
-      // 证实统计：让用户明确看到本路线是否有已证实方案
+      // 证实统计 + 彻底分区：主可见区只放已证实方案（_v>0）与「👤 你的方案」手动卡；未证实移入下方独立折叠板块
       const vFull=allCards.filter(m=>m._v===2).length, vPart=allCards.filter(m=>m._v===1).length;
-      const vNote=vFull>0?` · <b style="color:#16a34a">✅ ${vFull} 个方案全程已时刻表证实，已置顶</b>`
-        :vPart>0?` · <b style="color:#16a34a">✅ ${vPart} 个方案部分段已证实，已置顶</b>`
-        :` · <b style="color:#b91c1c">⚠ 本路线暂无时刻表证实方案，以下为计算推荐，购票前请查证</b>`;
+      const vList=allCards.filter(m=>m._v>0||m===userCard), uList=allCards.filter(m=>!(m._v>0||m===userCard));
+      const vNote=(vFull>0?` · <b style="color:#16a34a">✅ 仅展示已证实方案（全程证实 ${vFull} 个${vPart?`＋部分证实 ${vPart} 个`:""}）</b>`
+        :vPart>0?` · <b style="color:#16a34a">✅ 仅展示已证实方案（部分证实 ${vPart} 个）</b>`
+        :` · <b style="color:#b91c1c">⚠ 本路线暂无时刻表证实方案</b>`)
+        +(uList.length?` · <b style="color:#b45309">${uList.length} 个未证实方案已移至下方独立板块</b>`:"");
       const topN=6;
-      const visible=allCards.slice(0,topN), rest=allCards.slice(topN);
+      const visible=vList.slice(0,topN), rest=vList.slice(topN);
       // 提示文字
       if(_chainCities.length>=2){
         const path=[CA].concat(_chainCities).concat([CB]);
@@ -2236,14 +2248,21 @@ function render(){
         cn.innerHTML=`📍 直达约 ${Math.round(res.great*state.rates.circRoad)}km · 已按「证实优先」排序${vNote}，展示前 ${visible.length} 种组合方案${rest.length?`，其余 ${rest.length} 种已折叠`:''}${triCards.length?` · 含 ${triCards.length} 个 3 段方案`:''}`;
       }
       const restHtml=rest.length?`<details style="margin-top:10px">
-        <summary style="cursor:pointer;padding:8px 12px;background:#f8fafc;border:1px solid var(--line);border-radius:8px;font-size:13px;color:#475569;user-select:none;list-style:none;display:flex;justify-content:space-between;align-items:center">📋 还有 ${rest.length} 个方案（点击展开）<span style="font-size:11px">▼</span></summary>
-        <div style="margin-top:8px">${rest.map((m,i)=>{const gi=topN+i;return (gi===vFull+vPart&&vFull+vPart>0?'<div class="grpnote">⚠ 以下为未证实方案（计算推荐，购票前请查证）</div>':"")+modeCard(m,"crest"+i);}).join("")}</div>
+        <summary style="cursor:pointer;padding:8px 12px;background:#f8fafc;border:1px solid var(--line);border-radius:8px;font-size:13px;color:#475569;user-select:none;list-style:none;display:flex;justify-content:space-between;align-items:center">📋 还有 ${rest.length} 个已证实方案（点击展开）<span style="font-size:11px">▼</span></summary>
+        <div style="margin-top:8px">${rest.map((m,i)=>modeCard(m,"crest"+i)).join("")}</div>
       </details>`:"";
-      const visHtml=visible.map((m,i)=>((i===vFull+vPart&&vFull+vPart>0)?'<div class="grpnote">⚠ 以下为未证实方案（计算推荐，购票前请查证）</div>':"")+modeCard(m,"cvis"+i)).join("");
-      comboHtml=`<div class="subhead">🔗 组合联运方案 <span class="tag">多段交通 · 各段套券 · 证实优先 · 无大巴优先</span></div>`
+      const visHtml=visible.length?visible.map((m,i)=>modeCard(m,"cvis"+i)).join("")
+        :`<div class="warn">⚠ 本路线暂无时刻表证实方案——下方独立板块中的方案为计算推荐，购票前请先用卡片内官方链接查证</div>`;
+      // 未证实独立板块：与已证实主区完全隔离，警示底色；主区零证实时默认展开
+      const uHtml=uList.length?`<details${visible.length?"":" open"} style="margin-top:12px">
+        <summary style="cursor:pointer;padding:8px 12px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;font-size:13px;color:#92400e;font-weight:600;user-select:none;list-style:none;display:flex;justify-content:space-between;align-items:center">⚠ 未证实方案 ${uList.length} 个（计算推荐 · 官方时刻表未收录直达，购票前请查证）<span style="font-size:11px;font-weight:400">▼</span></summary>
+        <div style="margin-top:8px">${uList.map((m,i)=>modeCard(m,"cuv"+i)).join("")}</div>
+      </details>`:"";
+      comboHtml=`<div class="subhead">🔗 组合联运方案 <span class="tag">多段交通 · 各段套券 · 仅展示已证实</span></div>`
         +`<div style="margin:0 0 10px"><button class="btn btn-g btn-sm" onclick="queryMoreCombos()">${_showMoreCombos?"⬆ 收起多段方案":"🔍 主动查询更多方案（含 3 段联运）"}</button>${_showMoreCombos&&!triCards.length?'<span style="font-size:11.5px;color:var(--muted);margin-left:8px">该路线未找到比 2 段更优的 3 段方案</span>':""}</div>`
         +visHtml
-        +restHtml;
+        +restHtml
+        +uHtml;
     }
   }else{
     _showMoreCombos=false;
@@ -2253,9 +2272,13 @@ function render(){
   // 周边城镇抵达卡片（在 cheapest/fastest 计算后生成，供推荐徽标判断）
   let nearHtml="";
   if(state.near.enabled&&CA&&CB){
+    // 已证实/未证实分区：主区只展示主段被时刻表收录的方案，未证实移入折叠板块；concat 保 applyNear 索引连续
+    const nv=nearTop.filter(r=>r._v===1), nu=nearTop.filter(r=>r._v!==1);
+    window._nearTop=nv.concat(nu);
+    const altRow=(r,i)=>`<div class="altrow"><span>${MODES[r.m1].icon}${MODES[r.m2].icon} ${SHORT[r.m1]}到 <b>${r.C[0]}</b>（距${CB[0]}约${Math.round(hav(r.C,CB))}km）+${SHORT[r.m2]}接驳　¥${fmt(r.total)} · ${r.h}h</span><button class="btn btn-g btn-sm" onclick="applyNear(${i})">应用</button></div>`;
     nearHtml=`<div class="subhead">📍 周边城镇抵达 <span class="tag">经周边落地 · 接驳进城 · 各段套券</span></div>`
       +(nears.length?nears.map(modeCard).join(""):'<div class="warn">⚠ 请填写有效落地城镇，或点左列「🎯 推荐周边点」自动选择</div>')
-      +(nearTop.length?`<div class="altbox"><div style="font-size:11.5px;color:var(--muted);margin-bottom:4px">🎯 周边推荐 Top3（点「应用」载入）：</div>${nearTop.slice(0,3).map((r,i)=>`<div class="altrow"><span>${MODES[r.m1].icon}${MODES[r.m2].icon} ${SHORT[r.m1]}到 <b>${r.C[0]}</b>（距${CB[0]}约${Math.round(hav(r.C,CB))}km）+${SHORT[r.m2]}接驳　¥${fmt(r.total)} · ${r.h}h</span><button class="btn btn-g btn-sm" onclick="applyNear(${i})">应用</button></div>`).join("")}</div>`:"");
+      +(nearTop.length?`<div class="altbox"><div style="font-size:11.5px;color:var(--muted);margin-bottom:4px">🎯 周边推荐 Top3（点「应用」载入；<b style="color:#16a34a">仅展示已证实方案</b>${nu.length?`，${nu.length} 个未证实已折叠`:""}）：</div>${nv.length?nv.map(altRow).join(""):'<div style="font-size:11.5px;color:#d97706">⚠ 周边推荐暂无时刻表证实方案</div>'}${nu.length?`<details style="margin-top:5px"><summary style="cursor:pointer;padding:4px 9px;background:#fffbeb;border:1px solid #fcd34d;border-radius:7px;font-size:11.5px;color:#92400e;font-weight:600;user-select:none;list-style:none;display:flex;justify-content:space-between;align-items:center">⚠ 未证实方案 ${nu.length} 个（计算推荐 · 购票前请查证）<span style="font-size:10px;font-weight:400">▼</span></summary>${nu.map((r,i)=>altRow(r,nv.length+i)).join("")}</details>`:""}</div>`:"");
   }
 
   // KPI
