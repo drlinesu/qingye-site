@@ -315,11 +315,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610200113" defer></script>
-<script src="轻野-桥接.js?v=202610200113" defer></script>
-<script src="轻野-启程.js?v=202610200113" defer></script>
-<script src="轻野-捐赠.js?v=202610200113" defer></script>
-<script src="轻野-云仓.js?v=202610200113" defer></script>
+<script src="轻野-云盾.js?v=202610210013" defer></script>
+<script src="轻野-桥接.js?v=202610210013" defer></script>
+<script src="轻野-启程.js?v=202610210013" defer></script>
+<script src="轻野-捐赠.js?v=202610210013" defer></script>
+<script src="轻野-云仓.js?v=202610210013" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -1361,9 +1361,9 @@ function evalCombo(A,C,B,m1,m2,res){
   const t1=applyPct(tpc.pct,taxiPool);
   const t2=applyAmt(tpc.amt,taxiPool-t1.save,cars);
   [t1,t2].forEach(s=>{if(s.save>0){saveTotal+=s.save;used.push(s);}});
-  const xfer=(m1==="drive"&&m2==="drive")?15:40; // 两段均自驾视为连续驾驶，仅中途休息
+  const xfer=(m1==="drive"&&m2==="drive")?15:40; // 两段均自驾视为连续驾驶，仅中途休息（单位：分钟）
   const h1=legHours(m1,k1),h2=legHours(m2,k2);
-  const h=h1+h2+xfer;
+  const h=h1+h2+xfer/60; // xfer 为分钟，需换算为小时
   const direct=res.great*state.rates.circRoad;
   const detour=direct>0?(k1+k2)/direct:1;
   const warns=[];
@@ -1432,23 +1432,33 @@ function recommendCombos(A,B,res){ // 全网算法：城市图 2 段搜索 → �
   };
   search(2.2);
   if(!list.length)search(2.6); // 兜底：全网放宽绕行阈值再搜一轮（仍保持段级硬校验）
-  // 按多种维度排序，各取前2去重合并 → 约8-12条
+  // 段级证实计数（标记到每条方案，供下游优先挑选已证实城市）
+  const vvOf=r=>(segVerified(r.m1,A[0],r.C[0])===true?1:0)+(segVerified(r.m2,r.C[0],B[0])===true?1:0);
+  list.forEach(r=>r._v=vvOf(r));
+  // 先把所有已证实方案入池（保证 AI「某段有问题自动换城」能从已证实候选中挑选），再按多维排序补足未证实方案
+  const seen=new Set(),picked=[];
+  const verified=list.filter(r=>r._v>0);
+  for(const r of verified){
+    const k=r.m1+"+"+r.m2+"@"+r.C[0];
+    if(!seen.has(k)){seen.add(k);picked.push(r);}
+  }
+  // 按多种维度排序，各取前2去重合并（未证实方案）
   const byPrice=[...list].sort((a,b)=>a.total-b.total);
   const byTime=[...list].sort((a,b)=>a.h-b.h);
   const byDetour=[...list].sort((a,b)=>a.detour-b.detour);
   const mnT=Math.min(...list.map(x=>x.total)),mnH=Math.min(...list.map(x=>x.h)); // 预计算归一化基准（避免比较器内 O(n) 全表扫描）
   const byBalance=[...list].sort((a,b)=>a.total/mnT+a.h/mnH-(b.total/mnT+b.h/mnH));
-  const seen=new Set(),picked=[];
   for(const pool of [byPrice,byTime,byDetour,byBalance]){
+    let n=0; // 每个维度独立计数，各取前2
     for(const r of pool){
       const k=r.m1+"+"+r.m2+"@"+r.C[0];
       if(seen.has(k))continue;
       seen.add(k);picked.push(r);
-      if(picked.length>=2)break;
+      if(++n>=2)break;
     }
-    if(picked.length>=8)break;
+    if(picked.length>=12)break;
   }
-  return picked.slice(0,10);
+  return picked.slice(0,12);
 }
 /* ================= 组合联运 · 多中转站链式配置 =================
    cities/modes 为权威数据；city/m1/m2 自动同步为兼容镜像（旧逻辑全部继续有效） */
@@ -1726,9 +1736,13 @@ function aiTopTwo(A,B,res){
   // 直达最优基准（用于对比）
   const directMin=Math.min(...res.modes.map(m=>m.total));
   const directMinH=Math.min(...res.modes.map(m=>m.h));
+  // 段级证实计数 + 自动更换中转城市：存在全程证实方案时，推荐只从全程证实候选中挑选（某段未证实的城市自动被已证实的替代城市换掉）
+  const vvOf=r=>(segVerified(r.m1,A[0],r.C[0])===true?1:0)+(segVerified(r.m2,r.C[0],B[0])===true?1:0);
+  const fullV=pool.filter(r=>vvOf(r)===2), partV=pool.filter(r=>vvOf(r)===1);
+  const pickPool=fullV.length?fullV:(partV.length?partV:pool);
   // 按城市分组：每城市分别记录"花费最少方案"与"时间最少方案"
   const byCity={};
-  for(const r of pool){
+  for(const r of pickPool){
     const k=r.C[0];
     if(!byCity[k])byCity[k]={price:r,time:r};
     else{
@@ -1775,7 +1789,17 @@ function aiTopTwo(A,B,res){
     .sort((a,b)=>a.h-b.h);
   const tBest=timePool[0];
   const tClose=timePool.filter(r=>r.h<=tBest.h*1.06).sort((a,b)=>score(b)-score(a));
-  const timePick=tClose[0]||tBest;
+  const timePick=tClose[0]||tBest; // 候选池仅 1 城时可能为 undefined，push 处已判空
+  // 可中转城市列表：仅取已证实候选（优先全程证实），按城市取评分最高组合，供卡片城市名下方列出并可一键换城
+  const altPool=fullV.length?fullV:partV; // 只从已证实中取，未证实城市不混入列表
+  const altMap={};
+  for(const r of altPool){
+    const c=r.C[0];
+    if(!altMap[c]||score(r)>score(altMap[c]))altMap[c]=r;
+  }
+  const altCities=Object.values(altMap).sort((a,b)=>score(b)-score(a))
+    .map(r=>({city:r.C[0],m1:r.m1,m2:r.m2,total:r.total,h:r.h}));
+  window._aiXferAlt={};altCities.forEach(a=>{window._aiXferAlt[a.city]={city:a.city,m1:a.m1,m2:a.m2};});
   const out=[];
   const toObj=(r,label)=>{
     return {
@@ -1788,12 +1812,13 @@ function aiTopTwo(A,B,res){
       vsDirectH:r.h-directMinH,
       detour:r.detour,
       score:score(r),
-      v:(segVerified(r.m1,A[0],r.C[0])===true?1:0)+(segVerified(r.m2,r.C[0],B[0])===true?1:0), // 段级官方证实计数：0=未证实 / 1=部分 / 2=全程
-      note:`经 ${r.C[0]} 中转 · ${SHORT[r.m1]}+${SHORT[r.m2]} · 全程约 ${Math.round((r.k1||0)+(r.k2||0))}km · 换乘约 ${Math.round((r.xfer||0)*60)} 分钟 · 绕行 ${(r.detour||1).toFixed(2)}x${(state.form.goSeg||"mid")!=="mid"?` · 按${({early:"早",mid:"午",late:"晚",night:"夜"})[state.form.goSeg]}时段出发`:""}`
+      v:vvOf(r), // 段级官方证实计数：0=未证实 / 1=部分 / 2=全程
+      alts:altCities.filter(a=>a.city!==r.C[0]).slice(0,8), // 其它已证实可中转城市（城市名下方列表）
+      note:`经 ${r.C[0]} 中转 · ${SHORT[r.m1]}+${SHORT[r.m2]} · 全程约 ${Math.round((r.k1||0)+(r.k2||0))}km · 换乘约 ${Math.round(r.xfer||0)} 分钟 · 绕行 ${(r.detour||1).toFixed(2)}x${(state.form.goSeg||"mid")!=="mid"?` · 按${({early:"早",mid:"午",late:"晚",night:"夜"})[state.form.goSeg]}时段出发`:""}`
     };
   };
   out.push(toObj(pricePick,"💰 花费最少"));
-  out.push(toObj(timePick,"⚡ 时间最少"));
+  if(timePick&&timePick!==pricePick)out.push(toObj(timePick,"⚡ 时间最少"));
   /* 完整候选池（供展示层「按费用/按耗时」排序筛选）：评分与文案一并算好，两份排序副本 */
   const allRanked=pool.map(r=>toObj(r,null));
   window._aiXferPools={
@@ -1840,6 +1865,11 @@ function renderAiXfer(A,B,res){
       const cheaper=r.vsDirect<0?`<span style="color:#16a34a;font-weight:600">比直达省 ¥${fmt(-r.vsDirect)}</span>`:r.vsDirect===0?`<span style="color:var(--slate)">与直达持平</span>`:`<span style="color:#d97706">比直达贵 ¥${fmt(r.vsDirect)}</span>`;
       const faster=r.vsDirectH<0?`<span style="color:#16a34a;font-weight:600">省 ${(-r.vsDirectH).toFixed(1)}h</span>`:r.vsDirectH===0?`<span style="color:var(--slate)">与直达持平</span>`:`<span style="color:#d97706">多 ${r.vsDirectH.toFixed(1)}h</span>`;
       const vB=(r.v||0)>=2?'<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:#dcfce7;color:#16a34a;font-weight:600">✅ 全程已证实</span>':(r.v||0)===1?'<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:#dcfce7;color:#15803d;font-weight:600">✅ 部分已证实</span>':"";
+      // 可中转城市列表（均已证实可达目的地）：放在城市名下方，点击即换城；v>0 时才显示，alts 为空时给出提示
+      const altHtml=(r.v>0)?(r.alts&&r.alts.length
+        ?`<div style="font-size:11px;color:var(--slate);margin-top:4px;line-height:2">🔄 可中转城市（均已证实可达 ${B[0]}，点击换城）：${r.alts.map(a=>`<span onclick="aiXferApplyCity('${a.city}')" title="${SHORT[a.m1]}+${SHORT[a.m2]} · ¥${fmt(a.total)} · ${a.h.toFixed(1)}h" style="cursor:pointer;display:inline-block;padding:0 8px;margin:1px 3px 1px 0;border:1px solid var(--line);border-radius:999px;background:#fff;color:#0f766e;font-weight:600">${a.city}</span>`).join("")}</div>`
+        :`<div style="font-size:11px;color:var(--muted);margin-top:4px">🔄 本路线暂无其它已证实可中转城市</div>`
+      ):"";
       return `<div style="background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-top:7px">
         <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">
           <b style="color:#0f766e;font-size:13px">${r.label}</b>
@@ -1848,9 +1878,10 @@ function renderAiXfer(A,B,res){
           ${vB}
           <button class="btn btn-g btn-sm" style="margin-left:auto" onclick="applyAiXfer(${i})">🚀 一键应用</button>
         </div>
+        ${altHtml}
         <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:5px;font-size:12px">
           <span>💰 <b style="color:#dc2626">¥${fmt(r.total)}</b>（人均 ¥${fmt(r.per)}） ${cheaper}</span>
-          <span>⏱ 约 <b style="color:#2563eb">${r.h.toFixed(1)}h</b>（段1 ${r.h1.toFixed(1)}h + 段2 ${r.h2.toFixed(1)}h + 中转 ${Math.round(r.xfer*60)}min） ${faster}</span>
+          <span>⏱ 约 <b style="color:#2563eb">${r.h.toFixed(1)}h</b>（段1 ${r.h1.toFixed(1)}h + 段2 ${r.h2.toFixed(1)}h + 中转 ${Math.round(r.xfer||0)}min） ${faster}</span>
         </div>
         <div style="font-size:11px;color:var(--slate);margin-top:3px">${r.note} · 综合评分 <b style="color:#0f766e">${(r.score*100).toFixed(0)}/100</b></div>
       </div>`;
@@ -1875,6 +1906,15 @@ function applyAiXfer(i){
   comboChainSet([r.city],[r.m1,r.m2]);
   save();render();
   toast(`已应用：${SHORT[r.m1]}+${SHORT[r.m2]} 经 ${r.city}（${r.label}）`);
+}
+/* 一键更换中转城市：AI 卡片城市名下方的已证实可中转城市列表点击触发 */
+function aiXferApplyCity(c){
+  window._flushForm&&window._flushForm();
+  const r=(window._aiXferAlt||{})[c];if(!r)return;
+  state.combo.enabled=true;$("comboOn").checked=true;
+  comboChainSet([r.city],[r.m1,r.m2]);
+  save();render();
+  toast(`已更换中转城市：${SHORT[r.m1]}+${SHORT[r.m2]} 经 ${r.city}`);
 }
 
 /* ================= 指定中转城市的多方案对比（零侵入） =================
@@ -1931,7 +1971,7 @@ function renderCityCombos(A,C,B,res){
       <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">
         <b style="color:#0f766e;font-size:12.5px">${SHORT[r.m1]}+${SHORT[r.m2]}</b>
         ${vtag}
-        <span style="font-size:11px;color:var(--slate)">全程${Math.round((r.k1||0)+(r.k2||0))}km · 换乘${Math.round((r.xfer||0)*60)}min</span>
+        <span style="font-size:11px;color:var(--slate)">全程${Math.round((r.k1||0)+(r.k2||0))}km · 换乘${Math.round(r.xfer||0)}min</span>
         ${isCurrent?'<span style="font-size:10px;color:#10b981;font-weight:600">✓ 当前应用</span>':`<button class="btn btn-g btn-sm" style="margin-left:auto;font-size:10px;padding:1px 7px" onclick="applyCityCombo('${kind}',${i})">🚀 应用</button>`}
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:3px;font-size:11.5px">
