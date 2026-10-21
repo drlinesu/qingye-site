@@ -315,11 +315,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610211829" defer></script>
-<script src="轻野-桥接.js?v=202610211829" defer></script>
-<script src="轻野-启程.js?v=202610211829" defer></script>
-<script src="轻野-捐赠.js?v=202610211829" defer></script>
-<script src="轻野-云仓.js?v=202610211829" defer></script>
+<script src="轻野-云盾.js?v=202610211859" defer></script>
+<script src="轻野-桥接.js?v=202610211859" defer></script>
+<script src="轻野-启程.js?v=202610211859" defer></script>
+<script src="轻野-捐赠.js?v=202610211859" defer></script>
+<script src="轻野-云仓.js?v=202610211859" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -614,6 +614,8 @@
       <div id="modeList"></div>
       <div class="bars" id="barList" style="margin-top:14px"></div>
       <div class="rec" id="recRow"></div>
+      <div id="wxStrip" style="margin-top:12px"></div>
+      <div id="expBar" style="margin-top:12px"></div>
       <div id="dayBox" style="margin-top:14px"></div>
       <div style="margin-top:12px;display:flex;gap:8px">
         <button class="btn btn-g btn-sm" onclick="copySummary()">📋 复制结果汇总</button>
@@ -1121,7 +1123,7 @@ function compute(){
   const onTripTaxi=stay>0&&kmDay>0&&!state.form.transOnly?stay*ridesDay*cars*cityTaxiFare(kmDay/ridesDay):0;
   // 住宿餐饮（仅交通模式下关闭）
   const rooms=Math.ceil(p/2);
-  const stayCost=stay>0&&!state.form.transOnly?state.rates.hotel*rooms*stay+state.rates.meal*p*stay:0;
+  const stayCost=Math.round((stay>0&&!state.form.transOnly?state.rates.hotel*rooms*stay+state.rates.meal*p*stay:0)*(B?weatherFactor(B).f:1)); // 天气窗口季节性校准（间接校准住宿餐饮）
 
   const modes=[];
   const feasNotes=[]; // 可行性复核：被隐藏方案的原因说明
@@ -1382,6 +1384,174 @@ async function updateSchedules(manual){
 // 启动：先用本地缓存覆盖内置数据，再按设置后台自动更新（失败静默，不影响使用）
 loadSchedulesCache();
 if(localStorage.getItem(SCHEDULE_AUTO_KEY)!=="0")updateSchedules(false);
+/* ============ OSRM 真实路网里程 + 路网叠加（免费路由 API，无需 Key） ============ */
+const OSRM_KEY="qy_osrm_v1",OSRM_TTL=7*864e5;
+let _osrmInflight="";
+function osrmCacheGet(k){try{const o=JSON.parse(localStorage.getItem(OSRM_KEY)||"{}");const r=o[k];return (r&&Date.now()-r.t<OSRM_TTL)?r:null;}catch(e){return null;}}
+function osrmCacheSet(k,v){try{const o=JSON.parse(localStorage.getItem(OSRM_KEY)||"{}");o[k]=Object.assign({},v,{t:Date.now()});const ks=Object.keys(o);while(ks.length>300)delete o[ks.shift()];localStorage.setItem(OSRM_KEY,JSON.stringify(o));}catch(e){}}
+async function fetchOsrmRoute(A,B){ // 免费公共 OSRM：返回 {km,h,geo}；路网真实驾车里程
+  if(hav(A,B)>2500)return null; // 超远距离开车不现实，不请求
+  try{
+    const r=await fetch(`https://router.project-osrm.org/route/v1/driving/${A[2]},${A[1]};${B[2]},${B[1]}?overview=full&geometries=geojson`,{cache:"force-cache"});
+    if(!r.ok)return null;
+    const j=await r.json();const rt=j.routes&&j.routes[0];if(!rt)return null;
+    let coords=(rt.geometry&&rt.geometry.coordinates)||[];
+    if(coords.length>240){const step=Math.ceil(coords.length/240);coords=coords.filter((_,i)=>i%step===0);coords.push(rt.geometry.coordinates[rt.geometry.coordinates.length-1]);} // 降采样控制缓存体积
+    return {km:Math.round(rt.distance/1000),h:+(rt.duration/3600).toFixed(1),geo:{coordinates:coords}};
+  }catch(e){return null;}
+}
+function maybeFetchRoute(A,B){
+  if(!(A&&B))return;
+  const k=A[0]+"|"+B[0];
+  if(osrmCacheGet(k)||_osrmInflight===k)return;
+  _osrmInflight=k;
+  fetchOsrmRoute(A,B).then(v=>{
+    _osrmInflight="";
+    if(!v)return;
+    osrmCacheSet(k,v);
+    const A2=getCity(state.form.from),B2=getCity(state.form.to);
+    if(A2&&B2&&A2[0]===A[0]&&B2[0]===B[0]){
+      render(); // 缓存就绪后重渲染：距离提示补路网里程（下次 render 命中缓存，不会循环）
+      if(window._quickMap){window._qKey="";updateQuickMap(A2,B2);} // 绕过 _qKey 防重绘，把 OSRM 路网画到地图
+    }
+  });
+}
+/* ============ Open-Meteo 实时天气（免费 API，无需 Key，未来 7 天窗口，每日自动更新） ============ */
+const WX_KEY="qy_wx_v1";
+let _wx7Inflight="";
+function wxToday(){return new Date().toISOString().slice(0,10);}
+function wxCacheGet(name){try{const o=JSON.parse(localStorage.getItem(WX_KEY)||"{}");const r=o[name];return (r&&r.d===wxToday())?r.v:null;}catch(e){return null;}} // 键含日期 → 每天首次访问自动重拉
+function wxCacheSet(name,v){try{const o=JSON.parse(localStorage.getItem(WX_KEY)||"{}");o[name]={d:wxToday(),v};const ks=Object.keys(o);while(ks.length>60)delete o[ks.shift()];localStorage.setItem(WX_KEY,JSON.stringify(o));}catch(e){}}
+const WX_ICON=c=>c===0?"☀️":c<=2?"⛅":c===3?"☁️":(c===45||c===48)?"🌫️":(c>=51&&c<=57)?"🌦️":(c>=61&&c<=67)||(c>=80&&c<=82)?"🌧️":(c>=71&&c<=77)||(c>=85&&c<=86)?"🌨️":c>=95?"⛈️":"🌦️";
+async function fetchWx7(c){
+  try{
+    const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${c[1]}&longitude=${c[2]}&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum&forecast_days=7&timezone=auto`,{cache:"no-store"});
+    if(!r.ok)return null;
+    const j=await r.json();const d=j.daily;if(!d||!d.time)return null;
+    return d.time.map((t,i)=>({date:t,code:d.weathercode[i],tmax:d.temperature_2m_max[i],tmin:d.temperature_2m_min[i],rain:+d.precipitation_sum[i]}));
+  }catch(e){return null;}
+}
+function maybeFetchWeather(c){
+  if(!c)return;
+  if(wxCacheGet(c[0])||_wx7Inflight===c[0])return;
+  _wx7Inflight=c[0];
+  fetchWx7(c).then(v=>{
+    _wx7Inflight="";
+    if(!v)return;
+    wxCacheSet(c[0],v);
+    const B2=getCity(state.form.to);
+    if(B2&&B2[0]===c[0])render(); // 天气到达 → 住宿餐饮按季节系数重算（下次命中缓存，不循环）
+  });
+}
+function weatherFactor(c){ // 由目的地未来 7 天实时天气推导季节性费用系数（间接校准住宿餐饮估算）
+  const days=wxCacheGet(c[0]);if(!days||!days.length)return {f:1,reasons:[]};
+  const avgMax=days.reduce((s,d)=>s+d.tmax,0)/days.length,avgMin=days.reduce((s,d)=>s+d.tmin,0)/days.length;
+  const rainDays=days.filter(d=>d.rain>=5).length;
+  let f=1;const reasons=[];
+  if(avgMax>=33){f*=0.94;reasons.push("酷暑淡季");}
+  else if(avgMax<=0||avgMin<=-10){f*=0.94;reasons.push("严寒淡季");}
+  else if(avgMax>=15&&avgMax<=28&&avgMin>=5){f*=1.05;reasons.push("舒适旺季");}
+  if(rainDays>=4){f*=0.96;reasons.push("多雨");}
+  else if(rainDays===0&&avgMax>=15&&avgMax<=30){f*=1.02;reasons.push("晴好");}
+  f=Math.min(1.10,Math.max(0.88,+f.toFixed(3)));
+  return {f,reasons};
+}
+function renderWxStrip(B){
+  const el=$("wxStrip");if(!el)return;
+  if(!B){el.innerHTML="";return;}
+  const days=wxCacheGet(B[0]);
+  if(!days){el.innerHTML="";return;}
+  const f=weatherFactor(B);
+  const chip=d=>{
+    const md=d.date.slice(5).replace("-","/");
+    const warn=d.rain>=10?'<span style="color:#2563eb;font-weight:700">'+d.rain.toFixed(0)+'mm</span>':(d.rain>0?d.rain.toFixed(0)+"mm":"");
+    return `<span style="display:inline-flex;flex-direction:column;align-items:center;min-width:44px;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:#fff;margin:2px 4px 2px 0" title="${d.date} 降水 ${d.rain.toFixed(1)}mm"><span style="font-size:11px;color:var(--slate)">${md}</span><span style="font-size:16px;line-height:1.3">${WX_ICON(d.code)}</span><span style="font-size:11px;font-weight:600">${Math.round(d.tmax)}°/${Math.round(d.tmin)}°</span>${warn?`<span style="font-size:10px">${warn}</span>`:""}</span>`;
+  };
+  el.innerHTML=`<div style="padding:8px 10px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px">
+    <div style="font-size:12px;color:#0369a1;font-weight:600;margin-bottom:4px">🌦 ${B[0]} 未来 7 天天气窗口<span style="font-weight:400;color:var(--slate)">（Open-Meteo 实时预报 · 每日自动更新）</span>${f.f!==1?`<span style="margin-left:6px;color:#b45309;font-weight:600">⚖ 已按天气校准住宿餐饮 ×${f.f}（${f.reasons.join("·")}）</span>`:""}</div>
+    <div style="display:flex;flex-wrap:wrap">${days.map(chip).join("")}</div>
+  </div>`;
+}
+/* ============ 用户实际花费上报（极简入口 → Supabase 后端 → 均价校准参考） ============ */
+const EXP_KEY="qy_exp_v1";
+let _expKey="",_expOpen=false;
+function expCacheGet(k){try{const o=JSON.parse(localStorage.getItem(EXP_KEY)||"{}");const r=o[k];return (r&&r.d===wxToday())?r.v:null;}catch(e){return null;}}
+function expCacheSet(k,v){try{const o=JSON.parse(localStorage.getItem(EXP_KEY)||"{}");o[k]={d:wxToday(),v};const ks=Object.keys(o);while(ks.length>80)delete o[ks.shift()];localStorage.setItem(EXP_KEY,JSON.stringify(o));}catch(e){}}
+async function fetchExpAgg(A,B){ // 拉取该路线实报记录并聚合人均
+  if(!window.QYBridge)return null;
+  try{
+    const client=await QYBridge._getClient();if(!client)return null;
+    const r=await client.from("expense_reports").select("mode,cost,people").eq("from_city",A[0]).eq("to_city",B[0]).order("created_at",{ascending:false}).limit(200);
+    if(r.error)return {err:r.error};
+    return r.data||[];
+  }catch(e){return null;}
+}
+function expAggText(list){
+  if(!list)return "";
+  if(list.err)return `<span style="color:var(--muted)">实报数据暂不可用</span>`;
+  if(!list.length)return `<span style="color:var(--muted)">暂无用户实报，欢迎提交第一条</span>`;
+  const g={};
+  list.forEach(r=>{const p=Math.max(1,+r.people||1);(g[r.mode]=g[r.mode]||[]).push(r.cost/p);});
+  const nm={rail:"高铁",flight:"飞机",bus:"大巴",taxi:"打车",drive:"自驾",combo:"联运"};
+  const parts=Object.keys(g).map(m=>`${nm[m]||m} 人均 <b style="color:#0f766e">¥${fmt(Math.round(g[m].reduce((a,b)=>a+b,0)/g[m].length))}</b>（${g[m].length}条）`);
+  return `👥 用户实报 ${list.length} 条：${parts.join(" · ")}`;
+}
+function renderExpenseBar(A,B){
+  const el=$("expBar");if(!el)return;
+  if(!(A&&B)){el.innerHTML="";return;}
+  const k=A[0]+"|"+B[0];
+  const cached=expCacheGet(k);
+  const formHtml=_expOpen?`
+    <div style="margin-top:6px;padding:8px 10px;background:#fff;border:1px solid var(--line);border-radius:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+      <select id="expMode" style="font-size:12px;padding:3px 6px">${["rail","flight","bus","taxi","drive","combo"].map(m=>`<option value="${m}">${{rail:"🚄 高铁",flight:"✈️ 飞机",bus:"🚌 大巴",taxi:"🚕 打车",drive:"🚗 自驾",combo:"🔗 联运"}[m]}</option>`).join("")}</select>
+      <input id="expCost" type="number" min="1" placeholder="实际总花费 ¥" style="width:110px;font-size:12px;padding:3px 6px">
+      <input id="expPeople" type="number" min="1" max="20" placeholder="人数" value="${state.form.people||1}" style="width:60px;font-size:12px;padding:3px 6px">
+      <input id="expDate" type="date" value="${state.form.goDate||wxToday()}" style="font-size:12px;padding:3px 6px">
+      <button class="btn btn-g btn-sm" onclick="submitExpense()">✅ 提交</button>
+      <button class="btn btn-g btn-sm" onclick="expToggle(false)">收起</button>
+    </div>`:"";
+  el.innerHTML=`<div style="padding:8px 10px;background:#fdf4ff;border:1px solid #f0abfc;border-radius:8px;font-size:12px">
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px">
+      <b style="color:#86198f">📝 实际花费上报</b>
+      <span style="color:var(--slate)">${expAggText(cached)||"（加载实报数据中…）"}</span>
+      <button class="btn btn-g btn-sm" style="margin-left:auto" onclick="expToggle(true)">${_expOpen?"收起":"我来上报"}</button>
+    </div>${formHtml}
+  </div>`;
+  if(!cached&&_expKey!==k){
+    _expKey=k;
+    fetchExpAgg(A,B).then(v=>{
+      if(v){expCacheSet(k,v);}
+      const A2=getCity(state.form.from),B2=getCity(state.form.to);
+      if(A2&&B2&&A2[0]+"|"+B2[0]===k)renderExpenseBar(A2,B2);
+    });
+  }
+}
+function expToggle(open){_expOpen=!!open;const A=getCity(state.form.from),B=getCity(state.form.to);renderExpenseBar(A,B);}
+async function submitExpense(){
+  const A=getCity(state.form.from),B=getCity(state.form.to);
+  if(!(A&&B)){toast("请先填写出发/目的城市");return;}
+  const cost=+$("expCost").value,people=Math.max(1,+$("expPeople").value||1),date=$("expDate").value||wxToday();
+  if(!(cost>0)){toast("请填写实际总花费");return;}
+  if(!window.QYBridge){toast("后端模块未就绪，请稍后再试");return;}
+  const payload={from_city:A[0],to_city:B[0],mode:$("expMode").value,cost:Math.round(cost),people,travel_date:date};
+  if(!QYBridge._guard(JSON.stringify(payload))){toast("安全检查未通过，请稍后重试");return;}
+  try{
+    const client=await QYBridge._getClient();
+    if(!client){toast("后端未配置");return;}
+    const r=await client.from("expense_reports").insert(payload);
+    if(r.error){
+      if(/expense_reports|42P01|does not exist/i.test(r.error.message||"")||r.error.code==="42P01")toast("后端 expense_reports 表未创建，请联系站长建表");
+      else toast("提交失败："+(r.error.message||"未知错误"));
+      return;
+    }
+    expCacheSet(A[0]+"|"+B[0],null); // 清缓存强制重拉
+    try{const o=JSON.parse(localStorage.getItem(EXP_KEY)||"{}");delete o[A[0]+"|"+B[0]];localStorage.setItem(EXP_KEY,JSON.stringify(o));}catch(e){}
+    _expKey="";
+    toast("✅ 已提交，感谢分享真实花费！");
+    _expOpen=false;
+    renderExpenseBar(A,B);
+  }catch(e){toast("提交失败："+(e.message||e));}
+}
 /* 预测函数：时刻表命中→时段系数×节假日系数×席别档位；未命中回退费率推断（不修改 compute） */
 function predictFareByTime(A,B,mode,seg,date){
   try{
@@ -2280,12 +2450,17 @@ function render(){
   if(!A||!B){dn.innerHTML="⚠ 未识别城市：请从下拉列表选择，或在「距离修正」手动输入直线距离 km";dn.style.borderColor="#fda4af";}
   else{
     dn.style.borderColor="var(--line)";
-    dn.innerHTML=`📍 <b>${A[0]} ↔ ${B[0]}</b>　直线约 <b>${Math.round(res.great)}km</b>　→ 铁路/公路约 <b>${Math.round(res.rail)}km</b> · 航空约 <b>${Math.round(res.air)}km</b>（含绕行系数）`;
+    const _oc=osrmCacheGet(A[0]+"|"+B[0]);
+    dn.innerHTML=`📍 <b>${A[0]} ↔ ${B[0]}</b>　直线约 <b>${Math.round(res.great)}km</b>　→ 铁路/公路约 <b>${Math.round(res.rail)}km</b> · 航空约 <b>${Math.round(res.air)}km</b>（含绕行系数）`
+      +(_oc?`　🛣 实际路网约 <b>${_oc.km}km</b> · 驾车约 <b>${_oc.h}h</b>（OSRM 实测）`:"");
   }
   if(!res.modes.length){$("modeList").innerHTML='<div style="color:var(--muted);font-size:13px">请先填写有效城市</div>';return;}
 
   // AI 中转推荐（零侵入：独立卡片，不依赖组合联运开关；只读 res 不修改 compute/state）
   renderAiXfer(A,B,res);
+
+  // 路网里程（OSRM）+ 天气窗口（Open-Meteo，缓存按日键=每日自动更新）+ 用户实报（Supabase）
+  maybeFetchRoute(A,B); maybeFetchWeather(B); renderWxStrip(B); renderExpenseBar(A,B);
 
   // 组合联运（多段交通，各段分别套用优惠券）
   let combos=[],topCombos=[];
@@ -2932,6 +3107,13 @@ function updateQuickMap(A,B){
   const line=L.polyline([aLL,bLL],{color:"#0f766e",weight:3,dashArray:"8 6",opacity:.85}).addTo(map);
   line.bindTooltip("直线约 "+Math.round(hav(A,B))+"km（示意）",{sticky:true});
   window._qMarks=[mA,mB,line];
+  const oc=osrmCacheGet(qkey);
+  if(oc&&oc.geo){
+    const pts=oc.geo.coordinates.map(p=>mapLL(p[1],p[0]));
+    const rl=L.polyline(pts,{color:"#2563eb",weight:4,opacity:.9}).addTo(map);
+    rl.bindTooltip(`实际路网约 ${oc.km}km · 驾车约 ${oc.h}h（OSRM 实测）`,{sticky:true});
+    window._qMarks.push(rl);
+  }
   map.fitBounds([aLL,bLL],{padding:[45,45]});
 }
 function setQuickSource(s){
