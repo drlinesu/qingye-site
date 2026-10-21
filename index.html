@@ -315,11 +315,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610220138" defer></script>
-<script src="轻野-桥接.js?v=202610220138" defer></script>
-<script src="轻野-启程.js?v=202610220138" defer></script>
-<script src="轻野-捐赠.js?v=202610220138" defer></script>
-<script src="轻野-云仓.js?v=202610220138" defer></script>
+<script src="轻野-云盾.js?v=202610220156" defer></script>
+<script src="轻野-桥接.js?v=202610220156" defer></script>
+<script src="轻野-启程.js?v=202610220156" defer></script>
+<script src="轻野-捐赠.js?v=202610220156" defer></script>
+<script src="轻野-云仓.js?v=202610220156" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -1025,8 +1025,13 @@ function flightParts(km,R){
   const tax=state.rates.airportFee+(km<=800?state.rates.fuelLow:state.rates.fuelHigh);
   return {full,bare,tax};
 }
-function cityTaxiFare(km){const r=state.rates;return r.taxiStart+Math.max(0,km-r.taxiStartKm)*r.taxiPerKm+Math.max(0,km-(r.taxiFarKm||15))*(r.taxiFarFee||0)+cityRideTime(km)*(r.taxiPerMin||0);} // 滴滴快车口径：起步+里程+时长+超15km远途费
-function interTaxiFare(km){const r=state.rates;const hwy=state.form.tollFree?0:(km>=30?km*r.highwayFee:0);return r.taxiStart+Math.max(0,km-r.taxiStartKm)*r.taxiPerKm+km/85*60*(r.taxiPerMin||0)+hwy;} // 跨城按高速均速计时长费
+/* 滴滴分城市档位（结合滴滴各城市快车定价差异）：北上广深定价上浮约18%，有机场城市按基准价，其他小城下调约15% */
+const TAXI_TIER1=new Set(["北京","上海","广州","深圳"]);
+function taxiTier(city){if(!city)return 1;return TAXI_TIER1.has(city)?1.18:(AIRPORT_CITIES.has(city)?1:0.85);}
+function taxiTierName(city){const t=taxiTier(city);return t>1?"一线城市价":t<1?"小城价":"标准价";}
+function taxiNightMult(){return state.form.goSeg==="night"?1.2:1;} // 夜间时段（23:00-05:00）滴滴加收夜间服务费约20%
+function cityTaxiFare(km,city){const r=state.rates,t=taxiTier(city);return (r.taxiStart*t+Math.max(0,km-r.taxiStartKm)*r.taxiPerKm*t+Math.max(0,km-(r.taxiFarKm||15))*(r.taxiFarFee||0)*t+cityRideTime(km)*(r.taxiPerMin||0)*t)*taxiNightMult();} // 滴滴快车口径：起步+里程+时长+超15km远途费，按城市档位与夜间时段调整
+function interTaxiFare(km,city){const r=state.rates,t=taxiTier(city);const hwy=state.form.tollFree?0:(km>=30?km*r.highwayFee:0);return (r.taxiStart*t+Math.max(0,km-r.taxiStartKm)*r.taxiPerKm*t+km/85*60*(r.taxiPerMin||0)*t+hwy)*taxiNightMult();} // 跨城按高速均速计时长费（高速费为政府定价，不随档位浮动）
 function cityRideTime(km){return km/30*60+8;}
 function driveFare(km){const r=state.rates;const hwy=state.form.tollFree?0:km*r.highwayFee;return km/100*(r.fuelCons||7.5)*(r.fuelPrice||7.6)+hwy;} // 油费（油价参考发改委92#）+高速过路费
 function legHours(mode,km,R){
@@ -1123,7 +1128,7 @@ function compute(){
   // 当地每日打车（仅交通模式下关闭）
   const kmDay=+state.form.taxiKmDay||0;
   const ridesDay=Math.max(1,Math.round(kmDay/10));
-  const onTripTaxi=stay>0&&kmDay>0&&!state.form.transOnly?stay*ridesDay*cars*cityTaxiFare(kmDay/ridesDay):0;
+  const onTripTaxi=stay>0&&kmDay>0&&!state.form.transOnly?stay*ridesDay*cars*cityTaxiFare(kmDay/ridesDay,B&&B[0]):0;
   // 住宿餐饮（仅交通模式下关闭）
   const rooms=Math.ceil(p/2);
   const stayCost=Math.round((stay>0&&!state.form.transOnly?state.rates.hotel*rooms*stay+state.rates.meal*p*stay:0)*(B?weatherFactor(B).f:1)); // 天气窗口季节性校准（间接校准住宿餐饮）
@@ -1137,7 +1142,7 @@ function compute(){
     const stu=!!state.form.studentTicket&&(state.form.railClass==="2"||state.form.railClass==="ns");
     if(stu)fare*=0.75;
     const ticket=fare*p*legs;
-    const cityN=2*legs*cars*cityTaxiFare(R.stationCityKm);
+    const cityN=legs*cars*(cityTaxiFare(R.stationCityKm,A&&A[0])+cityTaxiFare(R.stationCityKm,B&&B[0]));
     const taxPool=ticket;
     const cp=pickCoupons("rail"), tpc=pickCoupons("taxi");
     const s1=applyPct(cp.pct,taxPool), s2=applyAmt(cp.amt,taxPool-s1.save,p);
@@ -1153,7 +1158,7 @@ function compute(){
   if(great>0&&segViable("flight",A,B,air)){
     const fp=flightParts(air,R);
     const ticket=fp.bare*p*legs, taxes=fp.tax*p*legs;
-    const cityN=2*legs*cars*cityTaxiFare(R.airportCityKm);
+    const cityN=legs*cars*(cityTaxiFare(R.airportCityKm,A&&A[0])+cityTaxiFare(R.airportCityKm,B&&B[0]));
     const cp=pickCoupons("flight"), tpc=pickCoupons("taxi");
     const s1=applyPct(cp.pct,ticket), s2=applyAmt(cp.amt,ticket-s1.save,p);
     const s3=applyPct(tpc.pct,cityN+onTripTaxi), s4=applyAmt(tpc.amt,cityN+onTripTaxi-s3.save,cars);
@@ -1169,7 +1174,7 @@ function compute(){
   if(great>0&&segViable("bus",A,B,road)){
     const fare=Math.max(10,road*state.rates.busRate)+2;
     const ticket=fare*p*legs;
-    const cityN=2*legs*cars*cityTaxiFare(R.stationCityKm);
+    const cityN=legs*cars*(cityTaxiFare(R.stationCityKm,A&&A[0])+cityTaxiFare(R.stationCityKm,B&&B[0]));
     const cp=pickCoupons("bus"), tpc=pickCoupons("taxi");
     const s1=applyPct(cp.pct,ticket), s2=applyAmt(cp.amt,ticket-s1.save,p);
     const s3=applyPct(tpc.pct,cityN+onTripTaxi), s4=applyAmt(tpc.amt,cityN+onTripTaxi-s3.save,cars);
@@ -1181,7 +1186,7 @@ function compute(){
   else if(great>0)feasNotes.push(`🚌 大巴：超过 600km 无常规长途班车，已隐藏大巴方案（建议高铁/飞机）`);
   // ---- 出租车/网约车（跨城门到门）----
   if(great>0){
-    const fare=interTaxiFare(road);
+    const fare=interTaxiFare(road,A&&A[0]);
     const ticket=fare*cars*legs;
     const tpc=pickCoupons("taxi");
     const pool=ticket+onTripTaxi;
@@ -1191,7 +1196,7 @@ function compute(){
     const sToll=state.form.tollFree?{save:(road>=30?road*R.highwayFee*cars*legs:0),label:"节假日高速免费（省）"}:{save:0,label:null};
     modes.push({key:"taxi",name:"出租车/网约车",icon:"🚕",color:"#e11d48",soft:"var(--rose-soft)",
       ticket,taxes:0,city:0,onTaxi:onTripTaxi,stay:stayCost,saves:[s1,s2,sToll].filter(s=>s.save>0||s.label),
-      h,days:Math.max(1,Math.ceil(h/16))*legs,note:kmLabel(road)+" · "+(state.form.tollFree?"高速免费":"含高速费")+" · "+cars+"辆车",warns});
+      h,days:Math.max(1,Math.ceil(h/16))*legs,note:kmLabel(road)+" · "+(state.form.tollFree?"高速免费":"含高速费")+" · "+cars+"辆车"+" · 滴滴"+taxiTierName(A&&A[0])+(state.form.goSeg==="night"?"+夜间20%":""),warns});
   }
   // ---- 自驾（油费+高速费；油价参考国家发改委 92# 汽油）----
   if(great>0){
@@ -1622,22 +1627,22 @@ function segOfficial(md,f,t){ // 段级「官方车次」证实：仅真实班�
   if(md!=="rail"&&md!=="flight")return false;
   return directHits(md,f,t).some(s=>!s.rep);
 }
-function segFare(mode,km,p,cars){
+function segFare(mode,km,p,cars,fromCity){
   if(mode==="rail") return {fare:railFare(km)*(state.form.studentTicket?0.75:1)*p,tax:0}; // 中转高铁段按二等座基准；学生票开时同样享 75 折
   if(mode==="flight"){const fp=flightParts(km);return {fare:fp.bare*p,tax:fp.tax*p};}
   if(mode==="bus") return {fare:(Math.max(10,km*state.rates.busRate)+2)*p,tax:0};
   if(mode==="drive") return {fare:driveFare(km)*cars,tax:0};
-  return {fare:interTaxiFare(km)*cars,tax:0};
+  return {fare:interTaxiFare(km,fromCity)*cars,tax:0};
 }
 function evalCombo(A,C,B,m1,m2,res){
   const p=res.p,legs=res.legs,cars=res.cars;
   const k1=segKm(A,C,m1),k2=segKm(C,B,m2);
-  const f1=segFare(m1,k1,p,cars),f2=segFare(m2,k2,p,cars);
+  const f1=segFare(m1,k1,p,cars,A&&A[0]),f2=segFare(m2,k2,p,cars,C&&C[0]);
   const farePool={rail:0,flight:0,bus:0,taxi:0,drive:0};
   farePool[m1]+=f1.fare;farePool[m2]+=f2.fare;
   const taxes=f1.tax+f2.tax;
-  const ride1=(m1==="taxi"||m1==="drive")?0:cars*cityTaxiFare(m1==="flight"?state.rates.airportCityKm:state.rates.stationCityKm);
-  const ride2=(m2==="taxi"||m2==="drive")?0:cars*cityTaxiFare(m2==="flight"?state.rates.airportCityKm:state.rates.stationCityKm);
+  const ride1=(m1==="taxi"||m1==="drive")?0:cars*cityTaxiFare(m1==="flight"?state.rates.airportCityKm:state.rates.stationCityKm,A&&A[0]);
+  const ride2=(m2==="taxi"||m2==="drive")?0:cars*cityTaxiFare(m2==="flight"?state.rates.airportCityKm:state.rates.stationCityKm,B&&B[0]);
   const city=(ride1+ride2)*legs;
   // 优惠券：高铁/飞机/大巴券作用于对应段票面；打车券作用于打车段+市内接驳+当地打车
   const used=[];let saveTotal=0;
@@ -1903,7 +1908,7 @@ function evalMultiCombo(A,cities,modes,res){
     const to=i===n-1?B:cities[i];
     const md=modes[i];
     const km=segKm(from,to,md);
-    const f=segFare(md,km,p,cars);
+    const f=segFare(md,km,p,cars,from&&from[0]);
     farePool[md]+=f.fare;
     totalFare+=f.fare; taxes+=f.tax; totalKm+=km;
     const h=legHours(md,km);
@@ -1919,8 +1924,8 @@ function evalMultiCombo(A,cities,modes,res){
     totalH += (modes[i]==="drive"&&modes[i+1]==="drive")?15/60:40/60;
   }
   // 市内接驳：起点 + 终点（非自驾/打车段才需要机场/车站接驳）
-  if(modes[0]!=="taxi"&&modes[0]!=="drive")cityRide+=cars*cityTaxiFare(modes[0]==="flight"?state.rates.airportCityKm:state.rates.stationCityKm);
-  if(modes[n-1]!=="taxi"&&modes[n-1]!=="drive")cityRide+=cars*cityTaxiFare(modes[n-1]==="flight"?state.rates.airportCityKm:state.rates.stationCityKm);
+  if(modes[0]!=="taxi"&&modes[0]!=="drive")cityRide+=cars*cityTaxiFare(modes[0]==="flight"?state.rates.airportCityKm:state.rates.stationCityKm,A&&A[0]);
+  if(modes[n-1]!=="taxi"&&modes[n-1]!=="drive")cityRide+=cars*cityTaxiFare(modes[n-1]==="flight"?state.rates.airportCityKm:state.rates.stationCityKm,B&&B[0]);
   cityRide*=legs;
   // 优惠券：按各方式票面分别套用（与 evalCombo 同口径）
   let saveTotal=0;const used=[];
@@ -6203,7 +6208,7 @@ function renderHotelGuide(city,force){
   }
   const railName=stationName(city,"rail")||name+"站",airName=stationName(city,"flight")||name+"机场";
   const trafficLine=p=>{
-    const tF=Math.round(cityTaxiFare(p.st)),aF=Math.round(cityTaxiFare(p.ap));
+    const tF=Math.round(cityTaxiFare(p.st,name)),aF=Math.round(cityTaxiFare(p.ap,name));
     return `<div style="font-size:10.5px;color:#64748b;margin-top:2px">🚄 ${railName} ${p.st}km · 打车约¥${tF}　｜　✈️ ${airName} ${p.ap}km · 打车约¥${aF}<br>${p.metro}　·　${p.note}</div>`;
   };
   const priced=pois.filter(p=>p.price!==null),unpriced=pois.filter(p=>p.price===null);
