@@ -315,11 +315,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610220207" defer></script>
-<script src="轻野-桥接.js?v=202610220207" defer></script>
-<script src="轻野-启程.js?v=202610220207" defer></script>
-<script src="轻野-捐赠.js?v=202610220207" defer></script>
-<script src="轻野-云仓.js?v=202610220207" defer></script>
+<script src="轻野-云盾.js?v=202610220216" defer></script>
+<script src="轻野-桥接.js?v=202610220216" defer></script>
+<script src="轻野-启程.js?v=202610220216" defer></script>
+<script src="轻野-捐赠.js?v=202610220216" defer></script>
+<script src="轻野-云仓.js?v=202610220216" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -2292,7 +2292,7 @@ function renderCityCombos(A,C,B,res){
     const cheaper=r.total-directMin;
     const faster=r.h-directMinH;
     const tagP=cheaper<0?`<span style="color:#16a34a">比直达省¥${fmt(-cheaper)}</span>`:cheaper===0?`<span style="color:var(--slate)">与直达持平</span>`:`<span style="color:#d97706">比直达贵¥${fmt(cheaper)}</span>`;
-    const tagT=faster<0?`<span style="color:#16a34a">省${(-faster).toFixed(1)}h</span>`:faster===0?`<span style="color:var(--slate)">持平</span>`:`<span style="color:#d97706">多${faster.toFixed(1)}h</span>`;
+    const tagT=faster<0?`<span style="color:#16a34a">省${fmtH(-faster)}</span>`:faster===0?`<span style="color:var(--slate)">持平</span>`:`<span style="color:#d97706">多${fmtH(faster)}</span>`;
     const isCurrent=state.combo.enabled&&state.combo.city===r.C[0]&&state.combo.m1===r.m1&&state.combo.m2===r.m2;
     // 段级证实标记：官方车次（真实班次）> 线路可行（推算代表班次）
     const o1=segOfficial(r.m1,A[0],r.C[0]),o2=segOfficial(r.m2,r.C[0],B[0]);
@@ -2318,7 +2318,7 @@ function renderCityCombos(A,C,B,res){
       <div style="font-size:12px;font-weight:600;color:#0f766e;margin-top:6px">${title}</div>
       ${g.length?g.map((r,i)=>card(r,i,kind)).join(""):'<div style="font-size:11.5px;color:#d97706;margin-top:5px">⚠ 该维度暂无时刻表证实方案</div>'}
     </div>`;
-  box.innerHTML=`<div style="margin-top:8px;padding:7px 10px;background:#f0fdfa;border-radius:6px;font-size:11.5px;color:var(--slate)">📍 经 <b>${C[0]}</b> 中转共找到 <b>${list.length}</b> 个合理方案，仅展示其中已证实的（直达基准：¥${fmt(directMin)} / ${directMinH.toFixed(1)}h）${uCount?` · <span style="color:var(--muted)">已自动隐藏 ${uCount} 个无法证实的方案</span>`:""}：</div>
+  box.innerHTML=`<div style="margin-top:8px;padding:7px 10px;background:#f0fdfa;border-radius:6px;font-size:11.5px;color:var(--slate)">📍 经 <b>${C[0]}</b> 中转共找到 <b>${list.length}</b> 个合理方案，仅展示其中已证实的（直达基准：¥${fmt(directMin)} / ${fmtH(directMinH)}）${uCount?` · <span style="color:var(--muted)">已自动隐藏 ${uCount} 个无法证实的方案</span>`:""}：</div>
     ${grp(byPrice,'price','💰 省钱方案（按总费用升序）')}
     ${grp(byTime,'time','⚡ 省时方案（按总时长升序）')}`;
 }
