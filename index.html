@@ -315,11 +315,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610211859" defer></script>
-<script src="轻野-桥接.js?v=202610211859" defer></script>
-<script src="轻野-启程.js?v=202610211859" defer></script>
-<script src="轻野-捐赠.js?v=202610211859" defer></script>
-<script src="轻野-云仓.js?v=202610211859" defer></script>
+<script src="轻野-云盾.js?v=202610211907" defer></script>
+<script src="轻野-桥接.js?v=202610211907" defer></script>
+<script src="轻野-启程.js?v=202610211907" defer></script>
+<script src="轻野-捐赠.js?v=202610211907" defer></script>
+<script src="轻野-云仓.js?v=202610211907" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -2180,7 +2180,7 @@ function renderAiXfer(A,B,res){
     items=items.filter(r=>(r.v||0)>0);
     window._aiTopTwo=items;
     const segBtn=(m,ic,lb)=>`<button onclick="aiXferSetSort('${m}')" style="padding:3px 10px;border-radius:999px;border:1px solid var(--line);font-size:11.5px;cursor:pointer;${sortMode===m?'background:#0f766e;color:#fff;font-weight:600':'background:#fff;color:var(--slate)'}">${ic}${lb}</button>`;
-    const header=`<div style="font-size:12px;color:var(--slate);margin-bottom:4px;padding:6px 9px;background:#f0fdfa;border-radius:6px">🤖 AI 综合 <b>费用(0.42)+时长(0.33)+绕行(0.10)+可行性(0.15)×线路可行</b> 多维度评分（含换乘复杂度 · 对比直达合理性 · 时段感知），从 <b>全网 ${candN} 城</b> × 多种交通组合中先做「机场/车站设施 + 距离 + 绕行」三重过滤、再挑出 2 个最优方案；费用/时长相近时自动取评分更高者。<br>直达基准：<b style="color:#dc2626">¥${fmt(directMin)}</b> / <b style="color:#2563eb">${directMinH.toFixed(1)}h</b>${bothWorse?' · <span style="color:#d97706;font-weight:600">⚠ 两个中转方案均不如直达，建议直接选直达方案</span>':''}<div style="display:flex;gap:6px;margin-top:8px;align-items:center;flex-wrap:wrap"><span style="font-size:11px;color:var(--slate)">排序筛选：</span>${segBtn("default","🤖 ","AI 推荐")}${segBtn("price","💰 ","按费用")}${segBtn("time","⚡ ","按耗时")}${sortMode!=="default"?`<span style="font-size:11px;color:var(--slate)">（展示前 ${items.length} 条，点「一键应用」生效）</span>`:""}</div></div>`;
+    const header=`<div style="font-size:12px;color:var(--slate);margin-bottom:4px;padding:6px 9px;background:#f0fdfa;border-radius:6px">🤖 AI 综合 <b>费用(0.42)+时长(0.33)+绕行(0.10)+可行性(0.15)×线路可行</b> 多维度评分（含换乘复杂度 · 对比直达合理性 · 时段感知），再从 <b>全网 ${candN} 城</b> × 多种交通组合中先做「机场/车站设施 + 距离 + 绕行」三重过滤、再挑出 2 个最优方案；费用/时长相近时自动取评分更高者。<br><span style="font-size:10.5px;color:var(--muted)">📚 静态数据来源：内置时刻表 schedules.json（${scheduleStatusText().replace("当前版本：","")}），非实时查询，购票前请以 12306/航司为准。</span><br>直达基准：<b style="color:#dc2626">¥${fmt(directMin)}</b> / <b style="color:#2563eb">${directMinH.toFixed(1)}h</b>${bothWorse?' · <span style="color:#d97706;font-weight:600">⚠ 两个中转方案均不如直达，建议直接选直达方案</span>':''}<div style="display:flex;gap:6px;margin-top:8px;align-items:center;flex-wrap:wrap"><span style="font-size:11px;color:var(--slate)">排序筛选：</span>${segBtn("default","🤖 ","AI 推荐")}${segBtn("price","💰 ","按费用")}${segBtn("time","⚡ ","按耗时")}${sortMode!=="default"?`<span style="font-size:11px;color:var(--slate)">（展示前 ${items.length} 条，点「一键应用」生效）</span>`:""}</div></div>`;
     const card=(r,i)=>{
       const cheaper=r.vsDirect<0?`<span style="color:#16a34a;font-weight:600">比直达省 ¥${fmt(-r.vsDirect)}</span>`:r.vsDirect===0?`<span style="color:var(--slate)">与直达持平</span>`:`<span style="color:#d97706">比直达贵 ¥${fmt(r.vsDirect)}</span>`;
       const faster=r.vsDirectH<0?`<span style="color:#16a34a;font-weight:600">省 ${(-r.vsDirectH).toFixed(1)}h</span>`:r.vsDirectH===0?`<span style="color:var(--slate)">与直达持平</span>`:`<span style="color:#d97706">多 ${r.vsDirectH.toFixed(1)}h</span>`;
