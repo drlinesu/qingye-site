@@ -315,11 +315,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610220216" defer></script>
-<script src="轻野-桥接.js?v=202610220216" defer></script>
-<script src="轻野-启程.js?v=202610220216" defer></script>
-<script src="轻野-捐赠.js?v=202610220216" defer></script>
-<script src="轻野-云仓.js?v=202610220216" defer></script>
+<script src="轻野-云盾.js?v=202610220229" defer></script>
+<script src="轻野-桥接.js?v=202610220229" defer></script>
+<script src="轻野-启程.js?v=202610220229" defer></script>
+<script src="轻野-捐赠.js?v=202610220229" defer></script>
+<script src="轻野-云仓.js?v=202610220229" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -6718,6 +6718,11 @@ async function renderPhotoGuide(spot,btnEl){
       </figure>
     </div>
   </div>`;
+  // 用户实拍（云端共享 · 20km 地理围栏 · 7 天自动清除）
+  html+=`<div style="margin-bottom:8px">
+    <div style="font-size:11.5px;color:#475569;margin-bottom:4px">🤳 用户实拍 <span style="font-size:10px;color:#94a3b8">（现场 20km 内可上传 · 全员可见 · ${7} 天后自动清除）</span></div>
+    <div class="qySpotPhotos" style="font-size:10.5px;color:#94a3b8">⏳ 正在加载用户实拍…</div>
+  </div>`;
   // 全网样片与优质作品（平台直达检索 + 开放版权实景样片）
   const kw=spot.kw||spot.name;
   html+=`<div style="margin-bottom:8px">
@@ -6753,6 +6758,67 @@ async function renderPhotoGuide(spot,btnEl){
   if(cbtn)cbtn.addEventListener("click",()=>{div.remove();btnEl.textContent="📷";});
   btnEl.textContent="📷";
   loadCommonsPhotos(div.querySelector(".qyCommonsBox"));
+  renderSpotPhotos(spot,div.querySelector(".qySpotPhotos"));
+}
+/* ================= 用户实拍上传（20km 地理围栏 · Supabase 云端共享 · 7 天自动清除） ================= */
+const SPOT_PHOTO_TTL_DAYS=7;
+async function renderSpotPhotos(spot,box){
+  if(!box)return;
+  const paint=rows=>{
+    const imgs=rows.map(r=>`<a href="${r.img}" target="_blank" rel="noopener" title="点击查看大图" style="display:block;width:76px;height:76px;border-radius:6px;overflow:hidden;border:1px solid #e2e8f0;background:#fff;flex:none"><img src="${r.img}" loading="lazy" alt="用户实拍" style="width:100%;height:100%;object-fit:cover;display:block"></a>`).join("");
+    box.innerHTML=(rows.length?`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:5px">${imgs}</div>`:'<div style="margin-bottom:5px">还没有人上传，到现场的你可以发第一条实拍</div>')
+      +`<button class="btn btn-g btn-sm" data-spup="1" style="font-size:10.5px;padding:2px 9px">📤 上传我的实拍</button>`
+      +`<span style="font-size:10px;color:#94a3b8;margin-left:5px">需定位在「${spot.name}」20km 范围内，校验通过才能上传；照片公开展示 ${SPOT_PHOTO_TTL_DAYS} 天后自动从云端清除</span>`;
+    box.querySelector("[data-spup]").addEventListener("click",()=>spotPhotoUpload(spot,box));
+  };
+  if(!window.QYBridge){box.innerHTML='<span style="font-size:10.5px;color:#94a3b8">云端模块未就绪，暂不可上传</span>';return;}
+  try{
+    const client=await QYBridge._getClient();if(!client)throw new Error("no client");
+    const cutoff=new Date(Date.now()-SPOT_PHOTO_TTL_DAYS*864e5).toISOString();
+    // 自动清除过期云端数据（每浏览器每天最多触发一次，尽力而为）
+    const gk="spotPhotoGcDay",today=new Date().toISOString().slice(0,10);
+    if(localStorage.getItem(gk)!==today){localStorage.setItem(gk,today);client.from("spot_photos").delete().lt("created_at",cutoff).then(()=>{}).catch(()=>{});}
+    const r=await client.from("spot_photos").select("id,img,created_at").eq("spot_key",spot.name).gte("created_at",cutoff).order("created_at",{ascending:false}).limit(12);
+    if(r.error)throw r.error;
+    paint(r.data||[]);
+  }catch(e){
+    box.innerHTML='<span style="font-size:10.5px;color:#94a3b8">云端实拍暂不可用（spot_photos 表未创建或当前离线）</span>';
+  }
+}
+function spotPhotoUpload(spot,box){
+  if(!navigator.geolocation){toast("当前浏览器不支持定位，无法校验拍摄范围");return;}
+  toast("📍 正在定位，校验是否在景点 20km 范围内…");
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const d=hav(["",pos.coords.latitude,pos.coords.longitude],["",spot.coords[0],spot.coords[1]]);
+    if(d>20){toast(`📍 当前距「${spot.name}」约 ${Math.round(d)}km，超出 20km 范围，需到现场后再上传`);return;}
+    const inp=document.createElement("input");inp.type="file";inp.accept="image/*";
+    inp.onchange=()=>{const f=inp.files&&inp.files[0];if(f)spotPhotoSend(spot,box,f);};
+    inp.click();
+  },()=>{toast("📍 定位被拒绝或失败，需允许定位且在景点现场 20km 内才能上传");},{timeout:10000});
+}
+function spotPhotoSend(spot,box,file){
+  const rd=new FileReader();
+  rd.onload=()=>{
+    const img=new Image();
+    img.onload=async()=>{
+      const sc=Math.min(1,900/Math.max(img.width,img.height));
+      const cv=document.createElement("canvas");cv.width=Math.max(1,Math.round(img.width*sc));cv.height=Math.max(1,Math.round(img.height*sc));
+      cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);
+      const dataUrl=cv.toDataURL("image/jpeg",0.72); // 压缩至 900px/JPEG，控制云端体积
+      if(dataUrl.length>900000){toast("图片过大，请换一张试试");return;}
+      try{
+        toast("☁️ 正在上传到云端…");
+        const client=await QYBridge._getClient();if(!client)throw new Error("no client");
+        const r=await client.from("spot_photos").insert({spot_key:spot.name,img:dataUrl});
+        if(r.error)throw r.error;
+        toast(`✅ 已上传！其他用户现在也能看到（${SPOT_PHOTO_TTL_DAYS} 天后自动清除）`);
+        renderSpotPhotos(spot,box);
+      }catch(e){toast("上传失败：云端 spot_photos 表未就绪或网络异常");}
+    };
+    img.onerror=()=>toast("图片读取失败，请换一张");
+    img.src=rd.result;
+  };
+  rd.readAsDataURL(file);
 }
 /* ================= 轻旅行：自然景观/小众秘境推荐 ================= */
 /* 景点对象 → 安全的内联参数（避免引号破坏 HTML 属性） */
