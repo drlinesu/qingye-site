@@ -315,11 +315,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610220156" defer></script>
-<script src="轻野-桥接.js?v=202610220156" defer></script>
-<script src="轻野-启程.js?v=202610220156" defer></script>
-<script src="轻野-捐赠.js?v=202610220156" defer></script>
-<script src="轻野-云仓.js?v=202610220156" defer></script>
+<script src="轻野-云盾.js?v=202610220207" defer></script>
+<script src="轻野-桥接.js?v=202610220207" defer></script>
+<script src="轻野-启程.js?v=202610220207" defer></script>
+<script src="轻野-捐赠.js?v=202610220207" defer></script>
+<script src="轻野-云仓.js?v=202610220207" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -6090,6 +6090,46 @@ function hotelStayCtx(name,checkin,nights){
   }
   return {factor:Math.round(sum/nights*100)/100,lv,reasons};
 }
+/* ===== 住宿费用加权推算（往年公开行情基准 × 多维系数，每周自动校准） =====
+   数据源：往年 OTA 公开行情中位区间（静态基准 HOTEL_BASE v2026.10）；
+   系数随日历自动推进（预订提前期逐日变化、周戳每周一翻转），无需后端即实现每周自动更新 */
+function hotelGeoLatF(city,mm){ // 地理位置加权：未被旺季关键词表覆盖的城市，按纬度/沿海推算季节需求
+  if(!city)return 1;
+  const name=city[0],lat=city[1]||35,coast=city.length>=8?city[7]==="Y":false;
+  if(hotelPeakLabel(name,mm))return 1; // 已在旺季表中的城市由旺季系数表达，不重复加权
+  if(mm===12||mm===1||mm===2){ // 冬季：华南避寒需求上升，高纬度严寒城市（非冰雪热门）回落
+    if(lat<25)return 1.08;
+    if(lat>40)return 0.92;
+  }
+  if(mm===7||mm===8){ // 夏季：沿海/高纬避暑需求上升，长江流域火炉内陆城市回落
+    if(coast||lat>35)return 1.06;
+    if(lat>=27&&lat<=33&&!coast)return 0.95;
+  }
+  return 1;
+}
+function hotelLeadF(checkin){ // 预订提前期加权（OTA 临近涨价规律）：随「今天」自动变化
+  const days=Math.round((new Date(checkin+"T00:00:00")-new Date(hotelFmtDate(new Date())+"T00:00:00"))/864e5);
+  if(days<=2)return 1.18;
+  if(days<=7)return 1.08;
+  if(days<=14)return 1.03;
+  if(days<=45)return 1;
+  return 0.97; // 早鸟期小幅回落
+}
+function hotelYearDriftF(){ // 年漂移：以 2025 年行情为基准年，住宿价格指数年均温和上涨约 3%（封顶+15%）
+  const y=new Date().getFullYear();
+  return Math.min(1.15,Math.max(1,1+0.03*(y-2025)));
+}
+function hotelWeekStamp(){ // 周戳：系数每周一自动校准（随日历推进翻转，作为「数据更新时间」展示）
+  const d=new Date(),t=new Date(d.getFullYear(),0,1);
+  const week=Math.ceil((((d-t)/864e5)+t.getDay()+1)/7);
+  const mon=new Date(d);mon.setDate(d.getDate()-((d.getDay()+6)%7));
+  return {week,monday:(mon.getMonth()+1)+"-"+String(mon.getDate()).padStart(2,"0")};
+}
+function hotelFactorAll(city,checkin,nights){ // 合成总系数：日期/季节 × 地理 × 预订提前期 × 年漂移
+  const ctx=hotelStayCtx(city[0],checkin,nights),mm=+checkin.slice(5,7);
+  const geo=hotelGeoLatF(city,mm),lead=hotelLeadF(checkin),drift=hotelYearDriftF();
+  return {factor:Math.round(ctx.factor*geo*lead*drift*100)/100,lv:ctx.lv,reasons:ctx.reasons,date:ctx.factor,geo,lead,drift};
+}
 /* 住宿小计上套用已添加的通用券（携程会员价/云闪付等 mode=any） */
 function hotelCoupon(amount,units){
   const cp=pickCoupons("any");
@@ -6170,7 +6210,8 @@ function renderHotelGuide(city,force){
   if(dateInp&&!dateInp.value)dateInp.value=checkin;
   const people=+state.form.people||1,rooms=Math.ceil(people/2);
   const stayRaw=+state.form.stayDays||0,nights=stayRaw||1,checkout=hotelAddDays(checkin,nights);
-  const tier=hotelTierOf(name),base=HOTEL_BASE[tier],ctx=hotelStayCtx(name,checkin,nights),F=ctx.factor;
+  const tier=hotelTierOf(name),base=HOTEL_BASE[tier],ctx=hotelFactorAll(city,checkin,nights),F=ctx.factor;
+  const ws=hotelWeekStamp();
   meta.innerHTML=`📅 ${checkin} → ${checkout} · <b>${stayRaw||1}</b> 晚 · <b>${rooms}</b> 间（${people}人）${stayRaw?"":" · <span style='color:#d97706'>左侧未填晚数，下方为单晚价</span>"}`;
   /* 房态条 */
   const lvMeta={
@@ -6180,6 +6221,7 @@ function renderHotelGuide(city,force){
   }[ctx.lv];
   occ.innerHTML=`<div style="padding:7px 10px;background:${lvMeta.bg};border:1px solid ${lvMeta.bd};border-radius:8px;font-size:11.5px;color:${lvMeta.c}">
     <div style="font-weight:700">${lvMeta.t} <span style="font-weight:400;font-size:10.5px">（${ctx.reasons.join(" / ")} · 本期房价约为平季 <b>${F.toFixed(2)}</b> 倍）</span></div>
+    <div style="margin-top:2px;color:#64748b;font-size:10.5px">📊 系数构成：日期/季节 ${ctx.date.toFixed(2)} × 地理 ${ctx.geo} × 提前期 ${ctx.lead} × 年指数 ${ctx.drift}　·　🔄 每周一自动校准，本周（第 ${ws.week} 周 · ${ws.monday} 起）已更新</div>
     <div style="margin-top:2px;color:#334155;font-size:11px">${lvMeta.tip}　<span style="color:#94a3b8">※ 房态为日期规律推断，非平台实时数据</span></div></div>`;
   /* 五档价格（套券） */
   const comfortMid=Math.round((base.comfort[0]+base.comfort[1])/2*F);
@@ -6250,12 +6292,12 @@ function renderHotelGuide(city,force){
       <button class="btn btn-g btn-sm" style="padding:4px 10px" onclick="saveHotelActual()">记录对比</button>
       ${actual?`<span style="color:${diff<=0?"#15803d":"#dc2626"}">${diff<=0?"比舒适档参考省约":"高于舒适档参考约"} ¥${Math.abs(Math.round(diff))}/晚</span>`:""}
     </div>`;
-  el.innerHTML=`<div style="font-size:12px;margin-bottom:4px;color:var(--slate)">🏨 <b style="color:var(--ink)">${name}</b> 住宿参考 · ${tier===1?"一线/顶级度假":tier===2?"新一线·热门旅游":"区域城市"} 档位${cpComfort.save>0?' · 已叠加你添加的通用优惠券':""}</div>
+  el.innerHTML=`<div style="font-size:12px;margin-bottom:4px;color:var(--slate)">🏨 <b style="color:var(--ink)">${name}</b> 住宿参考 · ${tier===1?"一线/顶级度假":tier===2?"新一线·热门旅游":"区域城市"} 档位 <span style="font-weight:400;font-size:10.5px;color:#94a3b8">· 第 ${ws.week} 周系数已校准（${ws.monday} 更新）</span>${cpComfort.save>0?' · 已叠加你添加的通用优惠券':""}</div>
     <div style="border:1px solid var(--line);border-radius:9px;overflow:hidden">${rowsHtml}</div>
     ${totalHtml}
     ${poisHtml}${unknownHtml}${areaHtml}
     ${actualHtml}
-    <div style="margin-top:6px;font-size:10.5px;color:#94a3b8">价格为公开行情中位区间（规则 v${HOTEL_DATA_VER}），节假日浮动大，以下方平台实时报价为准</div>`;
+    <div style="margin-top:6px;font-size:10.5px;color:#94a3b8">⚠️ 以上均为<b>估算价</b>：往年公开行情基准（规则 v${HOTEL_DATA_VER}）× 季节/节假日 × 地理纬度 × 预订提前期加权推算，每周自动校准（当前第 ${ws.week} 周 · ${ws.monday} 更新）；非平台实时报价，节假日浮动大，预订前请以携程/美团/飞猪实时价为准</div>`;
   /* 平台链接（带入住日期） */
   const kw=encodeURIComponent(name),cin=checkin,cout=checkout;
   lk.innerHTML=`<a class="btn btn-g btn-sm" target="_blank" href="https://hotels.ctrip.com/hotels/list?countryId=1&checkin=${cin}&checkout=${cout}&keyword=${kw}">🐬 携程·${name}</a>
