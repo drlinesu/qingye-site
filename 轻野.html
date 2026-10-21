@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -315,11 +315,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610211244" defer></script>
-<script src="轻野-桥接.js?v=202610211244" defer></script>
-<script src="轻野-启程.js?v=202610211244" defer></script>
-<script src="轻野-捐赠.js?v=202610211244" defer></script>
-<script src="轻野-云仓.js?v=202610211244" defer></script>
+<script src="轻野-云盾.js?v=202610211257" defer></script>
+<script src="轻野-桥接.js?v=202610211257" defer></script>
+<script src="轻野-启程.js?v=202610211257" defer></script>
+<script src="轻野-捐赠.js?v=202610211257" defer></script>
+<script src="轻野-云仓.js?v=202610211257" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -1213,67 +1213,126 @@ const TIME_SEG_MULT={early:0.9,mid:1.0,late:1.1,night:0.85};
 const TIME_SEG_LABEL={early:"早 6-9 点",mid:"午 10-14 点",late:"晚 15-21 点",night:"夜 22-5 点"};
 /* 离线高铁时刻表：覆盖 10 条主要干线；basePrice 为 G 字头二等座全价参考，可按用户当前席别/车次档位上浮 */
 let TRAIN_SCHEDULES=[
-  // 京沪干线（北京 ↔ 上海，1318km）
   {trainNo:"G1",from:"北京",to:"上海",duration:5.5,departSeg:"mid",basePrice:553},
   {trainNo:"G5",from:"北京",to:"上海",duration:5.8,departSeg:"early",basePrice:553},
   {trainNo:"G13",from:"北京",to:"上海",duration:5.6,departSeg:"late",basePrice:553},
   {trainNo:"G19",from:"北京",to:"上海",duration:5.7,departSeg:"night",basePrice:553},
-  // 京广干线（北京 ↔ 广州，2298km）
   {trainNo:"G71",from:"北京",to:"广州",duration:8.0,departSeg:"mid",basePrice:862},
   {trainNo:"G79",from:"北京",to:"广州",duration:9.0,departSeg:"early",basePrice:862},
   {trainNo:"G83",from:"北京",to:"广州",duration:8.5,departSeg:"late",basePrice:862},
-  // 京哈干线（北京 ↔ 哈尔滨，1244km）
   {trainNo:"G391",from:"北京",to:"哈尔滨",duration:5.0,departSeg:"mid",basePrice:540},
   {trainNo:"G393",from:"北京",to:"哈尔滨",duration:5.2,departSeg:"early",basePrice:540},
   {trainNo:"G903",from:"北京",to:"哈尔滨",duration:5.1,departSeg:"late",basePrice:540},
-  // 沪昆干线（上海 ↔ 昆明，2252km）
   {trainNo:"G1371",from:"上海",to:"昆明",duration:11.0,departSeg:"mid",basePrice:875},
   {trainNo:"G1373",from:"上海",to:"昆明",duration:11.5,departSeg:"early",basePrice:875},
-  // 西成干线（西安 ↔ 成都，658km）
   {trainNo:"G87",from:"西安",to:"成都",duration:4.0,departSeg:"mid",basePrice:263},
   {trainNo:"G89",from:"西安",to:"成都",duration:4.2,departSeg:"early",basePrice:263},
-  // 京杭干线（北京 ↔ 杭州，1430km）
   {trainNo:"G19B",from:"北京",to:"杭州",duration:5.0,departSeg:"mid",basePrice:538},
   {trainNo:"G20",from:"北京",to:"杭州",duration:5.3,departSeg:"early",basePrice:538},
   {trainNo:"G32",from:"北京",to:"杭州",duration:5.4,departSeg:"late",basePrice:538},
-  // 成广干线（成都 ↔ 广州，1511km）
   {trainNo:"G1701",from:"成都",to:"广州",duration:8.0,departSeg:"mid",basePrice:800},
   {trainNo:"G1705",from:"成都",to:"广州",duration:8.5,departSeg:"early",basePrice:800},
-  // 沪深干线（上海 ↔ 深圳，1450km）
   {trainNo:"G99",from:"上海",to:"深圳",duration:7.0,departSeg:"mid",basePrice:760},
   {trainNo:"G1301",from:"上海",to:"深圳",duration:7.5,departSeg:"early",basePrice:760},
-  // 京武干线（北京 ↔ 武汉，1229km）
   {trainNo:"G501",from:"北京",to:"武汉",duration:4.5,departSeg:"mid",basePrice:522},
   {trainNo:"G503",from:"北京",to:"武汉",duration:4.2,departSeg:"early",basePrice:522},
   {trainNo:"G505",from:"北京",to:"武汉",duration:4.3,departSeg:"late",basePrice:522},
-  // 京津城际（北京 ↔ 天津，120km）
   {trainNo:"C2003",from:"北京",to:"天津",duration:0.5,departSeg:"early",basePrice:55},
-  {trainNo:"C209",from:"北京",to:"天津",duration:0.5,departSeg:"night",basePrice:55}
+  {trainNo:"C2009",from:"北京",to:"天津",duration:0.5,departSeg:"night",basePrice:55},
+  {trainNo:"G111",from:"天津",to:"上海",duration:5.0,departSeg:"mid",basePrice:498},
+  {trainNo:"G3",from:"北京",to:"南京",duration:3.9,departSeg:"mid",basePrice:445},
+  {trainNo:"G11",from:"北京",to:"济南",duration:1.8,departSeg:"early",basePrice:195},
+  {trainNo:"G113",from:"济南",to:"上海",duration:3.4,departSeg:"mid",basePrice:330},
+  {trainNo:"G15",from:"南京",to:"上海",duration:1.4,departSeg:"late",basePrice:135},
+  {trainNo:"G17",from:"北京",to:"苏州",duration:5.0,departSeg:"mid",basePrice:520},
+  {trainNo:"G77",from:"武汉",to:"广州",duration:3.8,departSeg:"mid",basePrice:464},
+  {trainNo:"G1113",from:"武汉",to:"广州",duration:4.0,departSeg:"early",basePrice:464},
+  {trainNo:"G95",from:"北京",to:"郑州",duration:2.5,departSeg:"mid",basePrice:310},
+  {trainNo:"G521",from:"北京",to:"郑州",duration:2.6,departSeg:"late",basePrice:310},
+  {trainNo:"G551",from:"郑州",to:"武汉",duration:1.9,departSeg:"mid",basePrice:215},
+  {trainNo:"G533",from:"武汉",to:"长沙",duration:1.5,departSeg:"mid",basePrice:165},
+  {trainNo:"G535",from:"长沙",to:"广州",duration:2.4,departSeg:"mid",basePrice:314},
+  {trainNo:"G601",from:"北京",to:"长沙",duration:5.8,departSeg:"early",basePrice:650},
+  {trainNo:"G1103",from:"武汉",to:"深圳",duration:4.7,departSeg:"mid",basePrice:540},
+  {trainNo:"G1311",from:"长沙",to:"深圳",duration:3.3,departSeg:"mid",basePrice:390},
+  {trainNo:"G7349",from:"上海",to:"杭州",duration:0.8,departSeg:"mid",basePrice:73},
+  {trainNo:"G7351",from:"上海",to:"杭州",duration:0.9,departSeg:"late",basePrice:73},
+  {trainNo:"G1383",from:"杭州",to:"南昌",duration:2.6,departSeg:"mid",basePrice:265},
+  {trainNo:"G1331",from:"杭州",to:"长沙",duration:4.0,departSeg:"early",basePrice:405},
+  {trainNo:"G1351",from:"南昌",to:"长沙",duration:1.6,departSeg:"mid",basePrice:157},
+  {trainNo:"G1421",from:"长沙",to:"贵阳",duration:3.3,departSeg:"mid",basePrice:340},
+  {trainNo:"G1425",from:"贵阳",to:"昆明",duration:2.2,departSeg:"mid",basePrice:213},
+  {trainNo:"G1375",from:"上海",to:"长沙",duration:5.5,departSeg:"mid",basePrice:478},
+  {trainNo:"G1393",from:"上海",to:"贵阳",duration:8.6,departSeg:"early",basePrice:735},
+  {trainNo:"G921",from:"北京",to:"沈阳",duration:2.8,departSeg:"mid",basePrice:295},
+  {trainNo:"G923",from:"北京",to:"沈阳",duration:2.9,departSeg:"late",basePrice:295},
+  {trainNo:"G901",from:"沈阳",to:"哈尔滨",duration:2.1,departSeg:"mid",basePrice:245},
+  {trainNo:"G931",from:"北京",to:"长春",duration:4.0,departSeg:"early",basePrice:415},
+  {trainNo:"G912",from:"长春",to:"哈尔滨",duration:1.0,departSeg:"mid",basePrice:110},
+  {trainNo:"G7501",from:"上海",to:"宁波",duration:1.9,departSeg:"mid",basePrice:144},
+  {trainNo:"D2281",from:"宁波",to:"福州",duration:3.4,departSeg:"mid",basePrice:208},
+  {trainNo:"D3201",from:"福州",to:"厦门",duration:1.8,departSeg:"mid",basePrice:84},
+  {trainNo:"D2319",from:"厦门",to:"深圳",duration:3.5,departSeg:"mid",basePrice:180},
+  {trainNo:"G1911",from:"徐州",to:"郑州",duration:1.4,departSeg:"mid",basePrice:130},
+  {trainNo:"G1921",from:"郑州",to:"西安",duration:2.3,departSeg:"mid",basePrice:229},
+  {trainNo:"G1833",from:"郑州",to:"西安",duration:2.4,departSeg:"late",basePrice:229},
+  {trainNo:"G845",from:"西安",to:"兰州",duration:3.2,departSeg:"mid",basePrice:185},
+  {trainNo:"G3181",from:"郑州",to:"兰州",duration:5.5,departSeg:"early",basePrice:410},
+  {trainNo:"G2001",from:"郑州",to:"洛阳",duration:0.7,departSeg:"mid",basePrice:60},
+  {trainNo:"G8513",from:"成都",to:"重庆",duration:1.3,departSeg:"mid",basePrice:154},
+  {trainNo:"G8515",from:"成都",to:"重庆",duration:1.4,departSeg:"late",basePrice:154},
+  {trainNo:"G2929",from:"重庆",to:"贵阳",duration:2.2,departSeg:"mid",basePrice:129},
+  {trainNo:"G2931",from:"重庆",to:"贵阳",duration:2.3,departSeg:"late",basePrice:129},
+  {trainNo:"G651",from:"北京",to:"西安",duration:4.6,departSeg:"mid",basePrice:515},
+  {trainNo:"G653",from:"北京",to:"西安",duration:4.8,departSeg:"late",basePrice:515},
+  {trainNo:"G791",from:"北京",to:"太原",duration:2.8,departSeg:"mid",basePrice:195},
+  {trainNo:"G201",from:"北京",to:"青岛",duration:3.2,departSeg:"early",basePrice:335},
+  {trainNo:"G1741",from:"上海",to:"广州",duration:6.9,departSeg:"mid",basePrice:793},
+  {trainNo:"G86",from:"广州",to:"上海",duration:6.8,departSeg:"early",basePrice:793},
+  {trainNo:"G89A",from:"北京",to:"成都",duration:7.8,departSeg:"mid",basePrice:778},
+  {trainNo:"G307",from:"北京",to:"成都",duration:8.9,departSeg:"early",basePrice:778},
+  {trainNo:"G2964",from:"深圳",to:"成都",duration:8.2,departSeg:"mid",basePrice:830}
 ];
 /* 离线航班时刻表：覆盖主要干线城市对；basePrice 为经济舱全价参考（实际售价随提前期/航司/折扣变化） */
 let FLIGHT_SCHEDULES=[
-  // 京沪线
   {flightNo:"CA1501",from:"北京",to:"上海",duration:2.2,departSeg:"mid",basePrice:1240},
   {flightNo:"MU5101",from:"北京",to:"上海",duration:2.3,departSeg:"early",basePrice:1180},
   {flightNo:"CA1831",from:"北京",to:"上海",duration:2.2,departSeg:"late",basePrice:1280},
-  // 京广线
   {flightNo:"CA1301",from:"北京",to:"广州",duration:3.5,departSeg:"mid",basePrice:1480},
   {flightNo:"CZ3101",from:"北京",to:"广州",duration:3.6,departSeg:"early",basePrice:1380},
-  // 京哈线
   {flightNo:"CA1621",from:"北京",to:"哈尔滨",duration:2.2,departSeg:"mid",basePrice:920},
   {flightNo:"CZ6221",from:"北京",to:"哈尔滨",duration:2.3,departSeg:"late",basePrice:950},
-  // 沪昆线
   {flightNo:"MU5801",from:"上海",to:"昆明",duration:4.0,departSeg:"mid",basePrice:1560},
-  // 西成线
   {flightNo:"CA8201",from:"西安",to:"成都",duration:1.5,departSeg:"mid",basePrice:580},
-  // 京杭线
   {flightNo:"CA1701",from:"北京",to:"杭州",duration:2.2,departSeg:"mid",basePrice:1100},
-  // 成广线
   {flightNo:"CA4301",from:"成都",to:"广州",duration:2.5,departSeg:"mid",basePrice:980},
-  // 沪深线
   {flightNo:"MU5401",from:"上海",to:"深圳",duration:2.5,departSeg:"mid",basePrice:880},
-  // 京武线
-  {flightNo:"CA1801",from:"北京",to:"武汉",duration:2.0,departSeg:"mid",basePrice:760}
+  {flightNo:"CA1801",from:"北京",to:"武汉",duration:2.0,departSeg:"mid",basePrice:760},
+  {flightNo:"CA4111",from:"北京",to:"成都",duration:3.0,departSeg:"mid",basePrice:1690},
+  {flightNo:"CA4107",from:"北京",to:"成都",duration:3.1,departSeg:"late",basePrice:1690},
+  {flightNo:"CA1401",from:"北京",to:"西安",duration:2.0,departSeg:"mid",basePrice:1240},
+  {flightNo:"CA1201",from:"北京",to:"深圳",duration:3.3,departSeg:"mid",basePrice:1750},
+  {flightNo:"CA1331",from:"北京",to:"昆明",duration:3.8,departSeg:"early",basePrice:1900},
+  {flightNo:"CA1561",from:"北京",to:"长沙",duration:2.4,departSeg:"mid",basePrice:1350},
+  {flightNo:"CA1351",from:"北京",to:"三亚",duration:4.2,departSeg:"mid",basePrice:2300},
+  {flightNo:"CA1601",from:"北京",to:"沈阳",duration:1.5,departSeg:"mid",basePrice:760},
+  {flightNo:"CZ3501",from:"广州",to:"上海",duration:2.3,departSeg:"mid",basePrice:1380},
+  {flightNo:"CZ3531",from:"广州",to:"西安",duration:2.5,departSeg:"mid",basePrice:1260},
+  {flightNo:"CA3303",from:"广州",to:"杭州",duration:2.0,departSeg:"mid",basePrice:1080},
+  {flightNo:"CZ3551",from:"广州",to:"昆明",duration:2.4,departSeg:"mid",basePrice:1320},
+  {flightNo:"CZ3301",from:"深圳",to:"成都",duration:2.6,departSeg:"mid",basePrice:1430},
+  {flightNo:"CA4303",from:"深圳",to:"杭州",duration:2.0,departSeg:"mid",basePrice:1130},
+  {flightNo:"MU5301",from:"深圳",to:"西安",duration:2.6,departSeg:"mid",basePrice:1290},
+  {flightNo:"MU2201",from:"西安",to:"上海",duration:2.2,departSeg:"mid",basePrice:1220},
+  {flightNo:"CA1901",from:"杭州",to:"成都",duration:2.8,departSeg:"mid",basePrice:1520},
+  {flightNo:"3U8881",from:"成都",to:"长沙",duration:1.8,departSeg:"mid",basePrice:980},
+  {flightNo:"CA1409",from:"重庆",to:"上海",duration:2.4,departSeg:"mid",basePrice:1350},
+  {flightNo:"CA4119",from:"重庆",to:"北京",duration:2.8,departSeg:"mid",basePrice:1560},
+  {flightNo:"CZ8101",from:"重庆",to:"广州",duration:2.0,departSeg:"mid",basePrice:1180},
+  {flightNo:"CA4419",from:"昆明",to:"成都",duration:1.5,departSeg:"mid",basePrice:860},
+  {flightNo:"HU7601",from:"北京",to:"贵阳",duration:3.2,departSeg:"mid",basePrice:1580},
+  {flightNo:"MU5402",from:"上海",to:"武汉",duration:1.8,departSeg:"mid",basePrice:950},
+  {flightNo:"CZ3701",from:"武汉",to:"广州",duration:1.8,departSeg:"mid",basePrice:1080}
 ];
 /* ============ 时刻表在线更新（进入自动更新 + 设置中手动更新） ============ */
 const SCHEDULE_KEY="qy_schedules_v1",SCHEDULE_AUTO_KEY="qy_schedules_auto";
@@ -1471,6 +1530,7 @@ function sameCorridor(a,b){const sa=_corridorOf[a],sb=_corridorOf[b];if(!sa||!sb
 /* 高铁枢纽城市（省会/直辖市/铁路枢纽/热门城）：枢纽对之间 2500km 内现实中有跨线直达车（如 北京↔成都 G87/89、上海↔广州 G85） */
 const RAIL_HUBS=new Set(["北京","上海","广州","深圳","天津","重庆","成都","杭州","武汉","西安","南京","郑州","长沙","沈阳","大连","哈尔滨","长春","昆明","贵阳","南宁","石家庄","太原","呼和浩特","兰州","西宁","银川","乌鲁木齐","济南","青岛","合肥","南昌","福州","厦门","海口","宁波","苏州","无锡","徐州","洛阳","桂林","三亚"]);
 function hasScheduleHit(md,fN,tN){const tbl=md==="rail"?TRAIN_SCHEDULES:FLIGHT_SCHEDULES;return tbl.some(s=>(s.from===fN&&s.to===tN)||(s.from===tN&&s.to===fN));}
+function segHitNo(md,fN,tN){const tbl=md==="rail"?TRAIN_SCHEDULES:md==="flight"?FLIGHT_SCHEDULES:null;if(!tbl)return null;const s=tbl.find(x=>(x.from===fN&&x.to===tN)||(x.from===tN&&x.to===fN));return s?(s.trainNo||s.flightNo):null;}
 function segViable(md,fC,tC,km){ // 段级可行硬校验：城市设施 + 合理距离区间 + 现实班次存在性（参考去哪儿可订口径）
   if(!citySupports(fC,md)||!citySupports(tC,md))return false;
   const fN=fC[0],tN=tC[0];
@@ -1520,19 +1580,15 @@ function recommendCombos(A,B,res){ // 全网算法：城市图 2 段搜索 → �
   // 段级证实计数（标记到每条方案，供下游优先挑选已证实城市）
   const vvOf=r=>(segVerified(r.m1,A[0],r.C[0])===true?1:0)+(segVerified(r.m2,r.C[0],B[0])===true?1:0);
   list.forEach(r=>r._v=vvOf(r));
-  // 先把所有已证实方案入池（保证 AI「某段有问题自动换城」能从已证实候选中挑选），再按多维排序补足未证实方案
-  const seen=new Set(),picked=[];
+  // 只保留可证实方案入池：无法证实的方案（时刻表未收录的任何一段）直接除去，不再展示
   const verified=list.filter(r=>r._v>0);
-  for(const r of verified){
-    const k=r.m1+"+"+r.m2+"@"+r.C[0];
-    if(!seen.has(k)){seen.add(k);picked.push(r);}
-  }
-  // 按多种维度排序，各取前2去重合并（未证实方案）
-  const byPrice=[...list].sort((a,b)=>a.total-b.total);
-  const byTime=[...list].sort((a,b)=>a.h-b.h);
-  const byDetour=[...list].sort((a,b)=>a.detour-b.detour);
-  const mnT=Math.min(...list.map(x=>x.total)),mnH=Math.min(...list.map(x=>x.h)); // 预计算归一化基准（避免比较器内 O(n) 全表扫描）
-  const byBalance=[...list].sort((a,b)=>a.total/mnT+a.h/mnH-(b.total/mnT+b.h/mnH));
+  if(!verified.length)return []; // 整条路线无可证实中转方案 → 下游显示提示
+  const seen=new Set(),picked=[];
+  const byPrice=[...verified].sort((a,b)=>a.total-b.total);
+  const byTime=[...verified].sort((a,b)=>a.h-b.h);
+  const byDetour=[...verified].sort((a,b)=>a.detour-b.detour);
+  const mnT=Math.min(...verified.map(x=>x.total)),mnH=Math.min(...verified.map(x=>x.h)); // 预计算归一化基准（避免比较器内 O(n) 全表扫描）
+  const byBalance=[...verified].sort((a,b)=>a.total/mnT+a.h/mnH-(b.total/mnT+b.h/mnH));
   for(const pool of [byPrice,byTime,byDetour,byBalance]){
     let n=0; // 每个维度独立计数，各取前2
     for(const r of pool){
@@ -1940,9 +1996,9 @@ function renderAiXfer(A,B,res){
       items=poolArr.slice(0,5).map((r,i)=>({...r,label:(sortMode==="price"?"💰 费用#":"⚡ 耗时#")+(i+1)}));
       if(!items.length)items=top;
     }
-    // 已证实/未证实分区：主区只展示已证实（至少一段被官方时刻表收录），未证实移入折叠板块；concat 保 applyAiXfer 索引连续
-    const vItems=items.filter(r=>(r.v||0)>0), uItems=items.filter(r=>!((r.v||0)>0));
-    items=vItems.concat(uItems);
+    // 无法证实的方案直接除去：只展示已证实方案（至少一段被官方时刻表收录）
+    const uCount=items.filter(r=>!((r.v||0)>0)).length;
+    items=items.filter(r=>(r.v||0)>0);
     window._aiTopTwo=items;
     const segBtn=(m,ic,lb)=>`<button onclick="aiXferSetSort('${m}')" style="padding:3px 10px;border-radius:999px;border:1px solid var(--line);font-size:11.5px;cursor:pointer;${sortMode===m?'background:#0f766e;color:#fff;font-weight:600':'background:#fff;color:var(--slate)'}">${ic}${lb}</button>`;
     const header=`<div style="font-size:12px;color:var(--slate);margin-bottom:4px;padding:6px 9px;background:#f0fdfa;border-radius:6px">🤖 AI 综合 <b>费用(0.42)+时长(0.33)+绕行(0.10)+可行性(0.15)×官方证实</b> 多维度评分（含换乘复杂度 · 对比直达合理性 · 时段感知），从 <b>全网 ${candN} 城</b> × 多种交通组合中先做「设施+距离+绕行」三重过滤、再挑出 2 个最优方案；费用/时长相近时自动取评分更高者。<br>直达基准：<b style="color:#dc2626">¥${fmt(directMin)}</b> / <b style="color:#2563eb">${directMinH.toFixed(1)}h</b>${bothWorse?' · <span style="color:#d97706;font-weight:600">⚠ 两个中转方案均不如直达，建议直接选直达方案</span>':''}<div style="display:flex;gap:6px;margin-top:8px;align-items:center;flex-wrap:wrap"><span style="font-size:11px;color:var(--slate)">排序筛选：</span>${segBtn("default","🤖 ","AI 推荐")}${segBtn("price","💰 ","按费用")}${segBtn("time","⚡ ","按耗时")}${sortMode!=="default"?`<span style="font-size:11px;color:var(--slate)">（展示前 ${items.length} 条，点「一键应用」生效）</span>`:""}</div></div>`;
@@ -1969,11 +2025,12 @@ function renderAiXfer(A,B,res){
           <span>⏱ 约 <b style="color:#2563eb">${r.h.toFixed(1)}h</b>（段1 ${r.h1.toFixed(1)}h + 段2 ${r.h2.toFixed(1)}h + 中转 ${Math.round(r.xfer||0)}min） ${faster}</span>
         </div>
         <div style="font-size:11px;color:var(--slate);margin-top:3px">${r.note} · 综合评分 <b style="color:#0f766e">${(r.score*100).toFixed(0)}/100</b></div>
+        ${(()=>{const h1=segHitNo(r.m1,A[0],r.C[0]),h2=segHitNo(r.m2,r.C[0],B[0]);return (h1||h2)?`<div style="font-size:10.5px;color:#16a34a;margin-top:2px">🎫 班次复查：段1 ${h1?`<b>${h1}</b>`:"—（接驳段）"} · 段2 ${h2?`<b>${h2}</b>`:"—（接驳段）"}（时刻表收录，可至 12306/航司核实）</div>`:"";})()}
       </div>`;
     };
-    const vMain=vItems.length?vItems.map(card).join(""):`<div style="color:#d97706;font-size:12px;margin-top:7px">⚠ 本路线暂无时刻表证实的 AI 中转方案——下方独立板块为计算推荐，购票前请查证</div>`;
-    const uDet=uItems.length?`<details${vItems.length?"":" open"} style="margin-top:8px"><summary style="cursor:pointer;padding:6px 10px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;font-size:12px;color:#92400e;font-weight:600;user-select:none;list-style:none;display:flex;justify-content:space-between;align-items:center">⚠ 未证实方案 ${uItems.length} 个（计算推荐 · 购票前请查证）<span style="font-size:11px;font-weight:400">▼</span></summary>${uItems.map((r,i)=>card(r,vItems.length+i)).join("")}</details>`:"";
-    box.innerHTML=header+vMain+uDet;
+    const vMain=items.length?items.map(card).join(""):`<div style="color:#d97706;font-size:12px;margin-top:7px">⚠ 本路线暂无时刻表可证实的 AI 中转方案，建议选择直达方案</div>`;
+    const uNote=uCount?`<div style="font-size:10.5px;color:var(--muted);margin-top:6px">已自动隐藏 ${uCount} 个无法证实的方案（时刻表未收录，购票前无法核实）</div>`:"";
+    box.innerHTML=header+vMain+uNote;
   }catch(e){
     box.innerHTML=`<div style="color:#d97706;font-size:12px">⚠ AI 推荐生成异常：${e.message||e}</div>`;
   }
@@ -2034,11 +2091,12 @@ function renderCityCombos(A,C,B,res){
   }
   const directMin=Math.min(...res.modes.map(m=>m.total));
   const directMinH=Math.min(...res.modes.map(m=>m.h));
-  // 已证实/未证实分区：已证实=无未收录段且至少一段被时刻表收录；各维度证实 Top3 入主区，未证实 Top3 入折叠板块
+  // 无法证实的方案直接除去：已证实=无未收录段且至少一段被时刻表收录；各维度证实 Top3 展示
   const isV=r=>{const a1=segVerified(r.m1,A[0],r.C[0]),a2=segVerified(r.m2,r.C[0],B[0]);return a1!==false&&a2!==false&&(a1===true||a2===true);};
-  const splitSort=key=>{const s=[...list].sort((a,b)=>a[key]-b[key]);return{v:s.filter(isV).slice(0,3),u:s.filter(r=>!isV(r)).slice(0,3)};};
+  const uCount=list.filter(r=>!isV(r)).length;
+  const splitSort=key=>{const s=[...list].sort((a,b)=>a[key]-b[key]);return s.filter(isV).slice(0,3);};
   const byPrice=splitSort("total"), byTime=splitSort("h");
-  window._cityCombosDisp={price:byPrice.v.concat(byPrice.u),time:byTime.v.concat(byTime.u)}; // 与展示顺序一致，供 applyCityCombo 按索引取
+  window._cityCombosDisp={price:byPrice,time:byTime}; // 与展示顺序一致，供 applyCityCombo 按索引取
   const card=(r,i,kind)=>{
     const cheaper=r.total-directMin;
     const faster=r.h-directMinH;
@@ -2064,14 +2122,14 @@ function renderCityCombos(A,C,B,res){
         <span>⏱ <b style="color:#2563eb">${r.h.toFixed(1)}h</b>（段1 ${r.h1.toFixed(1)}h + 段2 ${r.h2.toFixed(1)}h）</span>
         <span style="color:var(--slate)">${tagP} · ${tagT}</span>
       </div>
+      ${(()=>{const h1=segHitNo(r.m1,A[0],r.C[0]),h2=segHitNo(r.m2,r.C[0],B[0]);return (h1||h2)?`<div style="font-size:10.5px;color:#16a34a;margin-top:2px">🎫 班次复查：段1 ${h1?`<b>${h1}</b>`:"—"} · 段2 ${h2?`<b>${h2}</b>`:"—"}（时刻表收录）</div>`:"";})()}
     </div>`;
   };
   const grp=(g,kind,title)=>`<div style="margin-top:6px">
       <div style="font-size:12px;font-weight:600;color:#0f766e;margin-top:6px">${title}</div>
-      ${g.v.length?g.v.map((r,i)=>card(r,i,kind)).join(""):'<div style="font-size:11.5px;color:#d97706;margin-top:5px">⚠ 该维度暂无时刻表证实方案</div>'}
-      ${g.u.length?`<details style="margin-top:5px"><summary style="cursor:pointer;padding:4px 9px;background:#fffbeb;border:1px solid #fcd34d;border-radius:7px;font-size:11.5px;color:#92400e;font-weight:600;user-select:none;list-style:none;display:flex;justify-content:space-between;align-items:center">⚠ 未证实方案 ${g.u.length} 个（计算推荐 · 购票前请查证）<span style="font-size:10px;font-weight:400">▼</span></summary>${g.u.map((r,i)=>card(r,g.v.length+i,kind)).join("")}</details>`:""}
+      ${g.length?g.map((r,i)=>card(r,i,kind)).join(""):'<div style="font-size:11.5px;color:#d97706;margin-top:5px">⚠ 该维度暂无时刻表证实方案</div>'}
     </div>`;
-  box.innerHTML=`<div style="margin-top:8px;padding:7px 10px;background:#f0fdfa;border-radius:6px;font-size:11.5px;color:var(--slate)">📍 经 <b>${C[0]}</b> 中转共找到 <b>${list.length}</b> 个合理方案，按维度分类展示（直达基准：¥${fmt(directMin)} / ${directMinH.toFixed(1)}h）· <b style="color:#16a34a">主区仅展示已证实方案</b>，未证实已折叠：</div>
+  box.innerHTML=`<div style="margin-top:8px;padding:7px 10px;background:#f0fdfa;border-radius:6px;font-size:11.5px;color:var(--slate)">📍 经 <b>${C[0]}</b> 中转共找到 <b>${list.length}</b> 个合理方案，仅展示其中已证实的（直达基准：¥${fmt(directMin)} / ${directMinH.toFixed(1)}h）${uCount?` · <span style="color:var(--muted)">已自动隐藏 ${uCount} 个无法证实的方案</span>`:""}：</div>
     ${grp(byPrice,'price','💰 省钱方案（按总费用升序）')}
     ${grp(byTime,'time','⚡ 省时方案（按总时长升序）')}`;
 }
@@ -2352,13 +2410,13 @@ function render(){
       cheapCard._tags=(cheapCard._tags||[]).concat([{t:"💰 最省钱",c:"var(--teal)",bg:"var(--teal-soft)"}]);
       const fastCard=allCards.reduce((fm,m)=>m.h<fm.h?m:fm,allCards[0]);
       if(fastCard!==cheapCard)fastCard._tags=(fastCard._tags||[]).concat([{t:"⚡ 最省时",c:"var(--blue)",bg:"var(--blue-soft)"}]);
-      // 证实统计 + 彻底分区：主可见区只放已证实方案（_v>0）与「👤 你的方案」手动卡；未证实移入下方独立折叠板块
+      // 无法证实的方案直接除去：主可见区只放已证实方案（_v>0）与「👤 你的方案」手动卡
       const vFull=allCards.filter(m=>m._v===2).length, vPart=allCards.filter(m=>m._v===1).length;
       const vList=allCards.filter(m=>m._v>0||m===userCard), uList=allCards.filter(m=>!(m._v>0||m===userCard));
       const vNote=(vFull>0?` · <b style="color:#16a34a">✅ 仅展示已证实方案（全程证实 ${vFull} 个${vPart?`＋部分证实 ${vPart} 个`:""}）</b>`
         :vPart>0?` · <b style="color:#16a34a">✅ 仅展示已证实方案（部分证实 ${vPart} 个）</b>`
         :` · <b style="color:#b91c1c">⚠ 本路线暂无时刻表证实方案</b>`)
-        +(uList.length?` · <b style="color:#b45309">${uList.length} 个未证实方案已移至下方独立板块</b>`:"");
+        +(uList.length?` · <span style="color:var(--muted)">已自动隐藏 ${uList.length} 个无法证实的方案</span>`:"");
       const topN=6;
       const visible=vList.slice(0,topN), rest=vList.slice(topN);
       // 提示文字
@@ -2377,17 +2435,11 @@ function render(){
         <div style="margin-top:8px">${rest.map((m,i)=>modeCard(m,"crest"+i)).join("")}</div>
       </details>`:"";
       const visHtml=visible.length?visible.map((m,i)=>modeCard(m,"cvis"+i)).join("")
-        :`<div class="warn">⚠ 本路线暂无时刻表证实方案——下方独立板块中的方案为计算推荐，购票前请先用卡片内官方链接查证</div>`;
-      // 未证实独立板块：与已证实主区完全隔离，警示底色；主区零证实时默认展开
-      const uHtml=uList.length?`<details${visible.length?"":" open"} style="margin-top:12px">
-        <summary style="cursor:pointer;padding:8px 12px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;font-size:13px;color:#92400e;font-weight:600;user-select:none;list-style:none;display:flex;justify-content:space-between;align-items:center">⚠ 未证实方案 ${uList.length} 个（计算推荐 · 官方时刻表未收录直达，购票前请查证）<span style="font-size:11px;font-weight:400">▼</span></summary>
-        <div style="margin-top:8px">${uList.map((m,i)=>modeCard(m,"cuv"+i)).join("")}</div>
-      </details>`:"";
+        :`<div class="warn">⚠ 本路线暂无时刻表可证实的方案——建议选择直达方案，或在 schedules.json 中补充该路线班次后重新计算</div>`;
       comboHtml=`<div class="subhead">🔗 组合联运方案 <span class="tag">多段交通 · 各段套券 · 仅展示已证实</span></div>`
         +`<div style="margin:0 0 10px"><button class="btn btn-g btn-sm" onclick="queryMoreCombos()">${_showMoreCombos?"⬆ 收起多段方案":"🔍 主动查询更多方案（含 3 段联运）"}</button>${_showMoreCombos&&!triCards.length?'<span style="font-size:11.5px;color:var(--muted);margin-left:8px">该路线未找到比 2 段更优的 3 段方案</span>':""}</div>`
         +visHtml
-        +restHtml
-        +uHtml;
+        +restHtml;
     }
   }else{
     _showMoreCombos=false;
@@ -2397,13 +2449,13 @@ function render(){
   // 周边城镇抵达卡片（在 cheapest/fastest 计算后生成，供推荐徽标判断）
   let nearHtml="";
   if(state.near.enabled&&CA&&CB){
-    // 已证实/未证实分区：主区只展示主段被时刻表收录的方案，未证实移入折叠板块；concat 保 applyNear 索引连续
+    // 无法证实的方案直接除去：只展示主段被时刻表收录的方案
     const nv=nearTop.filter(r=>r._v===1), nu=nearTop.filter(r=>r._v!==1);
-    window._nearTop=nv.concat(nu);
+    window._nearTop=nv;
     const altRow=(r,i)=>`<div class="altrow"><span>${MODES[r.m1].icon}${MODES[r.m2].icon} ${SHORT[r.m1]}到 <b>${r.C[0]}</b>（距${CB[0]}约${Math.round(hav(r.C,CB))}km）+${SHORT[r.m2]}接驳　¥${fmt(r.total)} · ${r.h}h</span><button class="btn btn-g btn-sm" onclick="applyNear(${i})">应用</button></div>`;
     nearHtml=`<div class="subhead">📍 周边城镇抵达 <span class="tag">经周边落地 · 接驳进城 · 各段套券</span></div>`
       +(nears.length?nears.map(modeCard).join(""):'<div class="warn">⚠ 请填写有效落地城镇，或点左列「🎯 推荐周边点」自动选择</div>')
-      +(nearTop.length?`<div class="altbox"><div style="font-size:11.5px;color:var(--muted);margin-bottom:4px">🎯 周边推荐 Top3（点「应用」载入；<b style="color:#16a34a">仅展示已证实方案</b>${nu.length?`，${nu.length} 个未证实已折叠`:""}）：</div>${nv.length?nv.map(altRow).join(""):'<div style="font-size:11.5px;color:#d97706">⚠ 周边推荐暂无时刻表证实方案</div>'}${nu.length?`<details style="margin-top:5px"><summary style="cursor:pointer;padding:4px 9px;background:#fffbeb;border:1px solid #fcd34d;border-radius:7px;font-size:11.5px;color:#92400e;font-weight:600;user-select:none;list-style:none;display:flex;justify-content:space-between;align-items:center">⚠ 未证实方案 ${nu.length} 个（计算推荐 · 购票前请查证）<span style="font-size:10px;font-weight:400">▼</span></summary>${nu.map((r,i)=>altRow(r,nv.length+i)).join("")}</details>`:""}</div>`:"");
+      +(nearTop.length?`<div class="altbox"><div style="font-size:11.5px;color:var(--muted);margin-bottom:4px">🎯 周边推荐 Top3（点「应用」载入；<b style="color:#16a34a">仅展示已证实方案</b>${nu.length?`，已自动隐藏 ${nu.length} 个无法证实的方案`:""}）：</div>${nv.length?nv.map(altRow).join(""):'<div style="font-size:11.5px;color:#d97706">⚠ 周边推荐暂无时刻表证实方案</div>'}</div>`:"");
   }
 
   // KPI
