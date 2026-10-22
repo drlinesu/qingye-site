@@ -315,11 +315,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610220814" defer></script>
-<script src="轻野-桥接.js?v=202610220814" defer></script>
-<script src="轻野-启程.js?v=202610220814" defer></script>
-<script src="轻野-捐赠.js?v=202610220814" defer></script>
-<script src="轻野-云仓.js?v=202610220814" defer></script>
+<script src="轻野-云盾.js?v=202610221021" defer></script>
+<script src="轻野-桥接.js?v=202610221021" defer></script>
+<script src="轻野-启程.js?v=202610221021" defer></script>
+<script src="轻野-捐赠.js?v=202610221021" defer></script>
+<script src="轻野-云仓.js?v=202610221021" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -6617,7 +6617,7 @@ async function renderPhotoGuide(spot,btnEl){
   // 先显示加载态
   const div=document.createElement("div");
   div.id="photoGuide_"+spot.name;
-  div.style.cssText="margin-top:6px;padding:10px;border-radius:8px;background:#faf5ff;border:1px solid #c4b5fd;font-size:12px;position:relative;z-index:5";
+  div.style.cssText="margin-top:6px;padding:10px;border-radius:8px;background:#faf5ff;border:1px solid #c4b5fd;font-size:12px;position:relative;z-index:5;max-width:100%;box-sizing:border-box;overflow-wrap:break-word";
   div.innerHTML='<div style="color:#6b21a8">⏳ 正在获取天气+计算出片窗口...</div>';
   btnEl.closest(".sp-row").parentNode.insertBefore(div,btnEl.closest(".sp-row").nextSibling);
   btnEl.textContent="⏳";
@@ -6741,7 +6741,7 @@ async function renderPhotoGuide(spot,btnEl){
   </div>`;
   // 7天概览
   html+=`<div style="font-size:11.5px;color:#475569;margin-bottom:4px">未来7天概览</div>`;
-  html+=`<table style="width:100%;font-size:11px;border-collapse:collapse">
+  html+=`<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table style="width:100%;min-width:430px;font-size:11px;border-collapse:collapse">
     <thead><tr style="color:#64748b"><th style="text-align:left;padding:2px 4px">日期</th><th style="text-align:left;padding:2px 4px">天气</th><th style="text-align:left;padding:2px 4px">🌅黄金</th><th style="text-align:left;padding:2px 4px">🌇黄金</th><th style="text-align:left;padding:2px 4px">☁最佳窗口</th><th style="text-align:left;padding:2px 4px">👥时段/人群</th></tr></thead><tbody>`;
   days.forEach(d=>{
     const bestWin=d.windows.slice().sort((a,b)=>b.score-a.score)[0];
@@ -6754,13 +6754,13 @@ async function renderPhotoGuide(spot,btnEl){
       <td style="padding:3px 4px;color:${bestWin.crowd.color}">${fmtHM(bestWin.start)} (${bestWin.crowd.level}) ${bestWin.score}分</td>
     </tr>`;
   });
-  html+=`</tbody></table>`;
-  // 关闭按钮（事件绑定，兼容无 id 的📷按钮行）
+  html+=`</tbody></table></div>`;
   html+=`<div style="margin-top:8px;text-align:right"><button class="qyPgClose" style="font-size:11px;border:none;background:#ede9fe;color:#6b21a8;padding:2px 8px;border-radius:4px;cursor:pointer">关闭</button></div>`;
   div.innerHTML=html;
   const cbtn=div.querySelector(".qyPgClose");
   if(cbtn)cbtn.addEventListener("click",()=>{div.remove();btnEl.textContent="📷";});
   btnEl.textContent="📷";
+  try{div.scrollIntoView({block:"nearest",behavior:"smooth"});}catch(e){div.scrollIntoView();} // 打开后滚动到可视区，避免手机端显示不全
   loadCommonsPhotos(div.querySelector(".qyCommonsBox"));
   renderSpotPhotos(spot,div.querySelector(".qySpotPhotos"));
 }
