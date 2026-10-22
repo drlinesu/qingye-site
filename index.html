@@ -299,6 +299,20 @@
     .foot{margin:0 auto 26px;padding:0 14px;font-size:11px}
     .toast{max-width:92vw;font-size:12.5px;padding:10px 16px;bottom:calc(18px + env(safe-area-inset-bottom))}
   }
+  /* —— AI 样片：点击加载 + 加载动画（不阻塞主线程） —— */
+  .sampleImgBox{position:relative;width:100%;height:108px;border-radius:6px;overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s,filter .2s}
+  .sampleImgBox:active{transform:scale(.97)}
+  .sampleSpinner{display:none;width:22px;height:22px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .sampleImgEl{display:none;width:100%;height:100%;object-fit:cover}
+  .sampleImgPlaceholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font-size:11px;color:#92400e;text-align:center;padding:6px}
+  .sampleImgBox.blue .sampleImgPlaceholder{color:#1e3a5f}
+  .sampleImgBox.loading .sampleHint{display:none}
+  .sampleImgBox.loading .sampleSpinner{display:block}
+  .sampleImgBox.loaded .sampleImgPlaceholder{display:none}
+  .sampleImgBox.loaded .sampleImgEl{display:block;animation:fadeIn .45s ease}
+  .sampleImgBox.loaded{cursor:default}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 </style>
 <link rel="preconnect" href="https://trae-api-cn.mchost.guru" crossorigin>
 <link rel="dns-prefetch" href="//trae-api-cn.mchost.guru">
@@ -315,11 +329,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610221440" defer></script>
-<script src="轻野-桥接.js?v=202610221440" defer></script>
-<script src="轻野-启程.js?v=202610221440" defer></script>
-<script src="轻野-捐赠.js?v=202610221440" defer></script>
-<script src="轻野-云仓.js?v=202610221440" defer></script>
+<script src="轻野-云盾.js?v=202610221553" defer></script>
+<script src="轻野-桥接.js?v=202610221553" defer></script>
+<script src="轻野-启程.js?v=202610221553" defer></script>
+<script src="轻野-捐赠.js?v=202610221553" defer></script>
+<script src="轻野-云仓.js?v=202610221553" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -6604,6 +6618,29 @@ async function loadCommonsPhotos(box){
     box.innerHTML='<div style="margin-top:5px">样片检索需联网——可点上方平台按钮直达查看实景</div>';
   }
 }
+/* AI 样片 URL：结合景点地形画像 + 朝向 + 光线时段生成写实 prompt（点击才加载，不阻塞主线程） */
+const T2I_BASE="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image";
+function spotSampleUrl(spot,kind){
+  const profile=terrainProfile(spot.name,spot.kw)||{};
+  const land=profile.label||"自然风光",likes=profile.likes||"",facing=spot.facing||"";
+  const lightDesc=kind==="golden"
+    ? "日出黄金时刻，太阳刚跃出地平线，低角度暖金色阳光，雾气与山脊染成金色，长阴影层次丰富"
+    : "蓝调时刻，日落后靛蓝色天空，街灯暖光初亮，冷暖对撞，夜色氛围感";
+  const quality="8K写实摄影，超清细节，专业风光摄影，色彩真实，氛围感强";
+  const prompt=[lightDesc,spot.name,land,likes,facing?`朝向${facing}`:"",quality].filter(Boolean).join("，");
+  return `${T2I_BASE}?prompt=${encodeURIComponent(prompt)}&image_size=landscape_16_9`;
+}
+function loadSampleImg(box){ // 点击触发该样片优先加载（异步，不阻塞其他代码）
+  if(box.classList.contains("loading")||box.classList.contains("loaded"))return;
+  box.classList.add("loading");
+  const img=box.querySelector(".sampleImgEl");
+  img.src=box.dataset.url; // 浏览器异步加载，生成期间 spinner 旋转
+}
+function onSampleImgLoaded(img){img.parentElement.classList.add("loaded");img.parentElement.classList.remove("loading");}
+function onSampleImgError(img){
+  const box=img.parentElement;box.classList.remove("loading");
+  const hint=box.querySelector(".sampleHint");if(hint){hint.textContent="⚠ 生成失败，点击重试";hint.style.display="block";}
+}
 /* renderPhotoGuide 的参数安全桥接：从内联 HTML 参数构建 spot 对象（kw=全网检索词） */
 function renderPhotoGuideByArgs(lat,lng,name,tier,facing,kw,btnEl){
   const spot={coords:[+lat,+lng],name,tier,facing,kw:kw||""};
@@ -6708,16 +6745,23 @@ async function renderPhotoGuide(spot,btnEl){
       <div style="margin-top:5px;background:#fffbeb;border:1px dashed #fcd34d;border-radius:5px;padding:5px 7px;line-height:1.7;color:#92400e"><b>🎯 出片建议</b>：${profile.comp}<br><b>🎒 装备</b>：${profile.gear}</div>
     </div>`;
   }
-  // 日出·黄金20分 / 蓝调20分 样图（本地静态图，秒开；AI 意境示意，帮助理解两类出片窗口）
+  // 日出·黄金20分 / 蓝调20分 AI 样片（结合地形画像生成 · 点击才加载 · 加载动画 · 不阻塞主线程）
+  const gUrl=spotSampleUrl(spot,"golden"),bUrl=spotSampleUrl(spot,"blue");
   html+=`<div style="margin-bottom:8px">
-    <div style="font-size:11.5px;color:#475569;margin-bottom:4px">📸 出片窗口样例 <span style="font-size:10px;color:#94a3b8">（AI 意境示意，非实景照片）</span></div>
+    <div style="font-size:11.5px;color:#475569;margin-bottom:4px">📸 出片窗口样例 <span style="font-size:10px;color:#94a3b8">（AI 结合地形细节生成 · 点击加载）</span></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
       <figure style="flex:1 1 210px;min-width:0;margin:0">
-        <img src="样图-黄金20分.jpg" alt="日出·黄金20分 样图" loading="lazy" decoding="async" style="width:100%;height:108px;object-fit:cover;display:block;border-radius:6px;border:1px solid #fde68a;background:#fef3c7;opacity:0;transition:opacity .45s ease" onload="this.style.opacity=1">
+        <div class="sampleImgBox golden" data-url="${gUrl}" onclick="loadSampleImg(this)" style="border:1px solid #fde68a;background:linear-gradient(135deg,#fef3c7,#fde68a)">
+          <div class="sampleImgPlaceholder"><div class="sampleSpinner"></div><div class="sampleHint">🌅 点击生成<br>日出·黄金20分</div></div>
+          <img class="sampleImgEl" alt="日出·黄金20分 AI样片" loading="lazy" decoding="async" onload="onSampleImgLoaded(this)" onerror="onSampleImgError(this)">
+        </div>
         <figcaption style="font-size:10.5px;color:#78350f;margin-top:3px;line-height:1.6">🌅 <b>日出·黄金20分</b>：太阳刚跃出地平线，低角度暖光把雾气和山脊染成金色，长阴影层次最丰富</figcaption>
       </figure>
       <figure style="flex:1 1 210px;min-width:0;margin:0">
-        <img src="样图-蓝调20分.jpg" alt="蓝调20分 样图" loading="lazy" decoding="async" style="width:100%;height:108px;object-fit:cover;display:block;border-radius:6px;border:1px solid #bfdbfe;background:#eff6ff;opacity:0;transition:opacity .45s ease" onload="this.style.opacity=1">
+        <div class="sampleImgBox blue" data-url="${bUrl}" onclick="loadSampleImg(this)" style="border:1px solid #bfdbfe;background:linear-gradient(135deg,#eff6ff,#bfdbfe)">
+          <div class="sampleImgPlaceholder"><div class="sampleSpinner"></div><div class="sampleHint">🌆 点击生成<br>蓝调20分</div></div>
+          <img class="sampleImgEl" alt="蓝调20分 AI样片" loading="lazy" decoding="async" onload="onSampleImgLoaded(this)" onerror="onSampleImgError(this)">
+        </div>
         <figcaption style="font-size:10.5px;color:#1e3a5f;margin-top:3px;line-height:1.6">🌆 <b>蓝调20分</b>：日落后天光呈靛蓝，街灯暖光刚亮起，冷暖对撞是城市/海岸夜景最易出片的窗口</figcaption>
       </figure>
     </div>
@@ -6764,120 +6808,30 @@ async function renderPhotoGuide(spot,btnEl){
   loadCommonsPhotos(div.querySelector(".qyCommonsBox"));
   renderSpotPhotos(spot,div.querySelector(".qySpotPhotos"));
 }
-/* ================= Canvas 算法增强（降噪+自动对比度+USM 锐化 · 无水印 · 零成本 · 纯客户端） =================
-   这是"算法优化"级别——对有损压缩后的用户实拍效果显著优于原图，但不是真 AI 超分。
-   真 AI 超清按钮已预留入口（见 renderSpotPhotos 中的 data-ai-upscale 按钮），将来接 Cloudflare Workers AI。 */
-function qyBoxBlur3x3(imgData){ // 轻降噪：3×3 盒式滤波，去除 JPEG 压缩块伪影
-  const {data,width,height}=imgData, out=new Uint8ClampedArray(data);
-  for(let y=1;y<height-1;y++)for(let x=1;x<width-1;x++){
-    let r=0,g=0,b=0,c=0;
-    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
-      const i=((y+dy)*width+(x+dx))*4;r+=data[i];g+=data[i+1];b+=data[i+2];c++;
-    }
-    const j=(y*width+x)*4;out[j]=r/c;out[j+1]=g/c;out[j+2]=b/c;out[j+3]=data[j+3];
-  }
-  return new ImageData(out,width,height);
-}
-function qyAutoContrast(imgData){ // 直方图拉伸：取 RGB 三通道各 5%/95% 分位，把 [lo,hi] 映射到 [0,255]
-  const {data,width,height}=imgData,n=width*height;
-  const rh=new Uint16Array(256),gh=new Uint16Array(256),bh=new Uint16Array(256);
-  for(let i=0;i<n;i++){const j=i*4;rh[data[j]]++;gh[data[j+1]]++;bh[data[j+2]]++;}
-  const lo=a=>{let s=0,t=n*0.05;for(let i=0;i<256;i++){s+=a[i];if(s>=t)return i;}return 0;};
-  const hi=a=>{let s=0,t=n*0.95;for(let i=0;i<256;i++){s+=a[i];if(s>=t)return i;}return 255;};
-  const rl=lo(rh),rhv=hi(rh),gl=lo(gh),ghv=hi(gh),bl=lo(bh),bhv=hi(bh);
-  const lmap=(v,lo_,hi_)=>{if(hi_<=lo_)return v;const s=(v-lo_)/(hi_-lo_);return Math.round(Math.max(0,Math.min(255,s*255)));};
-  for(let i=0;i<n;i++){const j=i*4;data[j]=lmap(data[j],rl,rhv);data[j+1]=lmap(data[j+1],gl,ghv);data[j+2]=lmap(data[j+2],bl,bhv);}
-  return imgData;
-}
-function qyUSM(imgData,amount){ // USM 锐化：S = 原图 + amount × (原图 - 模糊图)，对压缩 JPEG 边缘恢复显著
-  const {data,width,height}=imgData;
-  // 简易模糊（再跑一次 box blur，半径略大）
-  const blur=new Uint8ClampedArray(data);
-  for(let y=1;y<height-1;y++)for(let x=1;x<width-1;x++){
-    let r=0,g=0,b=0,c=0;
-    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
-      const i=((y+dy)*width+(x+dx))*4;r+=data[i];g+=data[i+1];b+=data[i+2];c++;
-    }
-    const j=(y*width+x)*4;blur[j]=r/c;blur[j+1]=g/c;blur[j+2]=b/c;
-  }
-  for(let i=0,len=data.length;i<len;i+=4){
-    data[i]=Math.max(0,Math.min(255,data[i]+amount*(data[i]-blur[i])));
-    data[i+1]=Math.max(0,Math.min(255,data[i+1]+amount*(data[i+1]-blur[i+1])));
-    data[i+2]=Math.max(0,Math.min(255,data[i+2]+amount*(data[i+2]-blur[i+2])));
-  }
-  return imgData;
-}
-function enhancePhotoCanvas(canvas,opts){ // 总入口：降噪→自动对比度→USM 锐化，返回增强后的 dataUrl
-  opts=opts||{};
-  const ctx=canvas.getContext("2d");
-  const d1=ctx.getImageData(0,0,canvas.width,canvas.height);
-  const d2=qyBoxBlur3x3(d1); // 第一步：轻降噪去压缩块
-  qyAutoContrast(d2);         // 第二步：直方图拉伸提升动态范围
-  qyUSM(d2,opts.amount!=null?opts.amount:0.8); // 第三步：USM 锐化（amount 0.5-1.2 合适）
-  ctx.putImageData(d2,0,0);
-  return canvas.toDataURL("image/jpeg",0.82);
-}
-/* ================= 用户实拍上传（20km 地理围栏 · 云端共享 · 永久储存 · Canvas 算法增强） =================
-   云端永久存储后续将迁移至 Cloudflare R2（见 work/spot-photo-worker.js），当前暂存 Supabase spot_photos */
-const SPOT_PHOTO_TTL_DAYS=99999; // 已改为永久储存（R2 迁移后移除此字段）
+/* ================= 用户实拍上传（20km 地理围栏 · Supabase 云端共享 · 7 天自动清除） ================= */
+const SPOT_PHOTO_TTL_DAYS=7;
 async function renderSpotPhotos(spot,box){
   if(!box)return;
   const paint=rows=>{
-    const imgWrap=r=>{
-      // 每张缩略图外层容器：原图 + Canvas 增强按钮 + 预留 AI 超清按钮 + 恢复原图按钮
-      return `<div data-sphoto style="position:relative;width:76px;height:76px;margin-right:5px;margin-bottom:5px">
-        <a href="${r.img}" target="_blank" rel="noopener" title="点击查看大图" style="display:block;width:76px;height:76px;border-radius:6px;overflow:hidden;border:1px solid #e2e8f0;background:#fff;flex:none">
-          <img src="${r.img}" data-original="${r.img}" loading="lazy" alt="用户实拍" style="width:100%;height:100%;object-fit:cover;display:block">
-        </a>
-        <div style="position:absolute;left:0;right:0;bottom:-2px;display:flex;gap:2px;justify-content:center">
-          <button data-senhance title="Canvas 算法优化：降噪+自动对比度+锐化（无水印）" style="font-size:9px;padding:0 4px;border:none;background:rgba(15,118,110,0.85);color:#fff;border-radius:3px;cursor:pointer;line-height:1.6">✨增强</button>
-          <button data-supscale title="AI 超清（接入 Cloudflare Workers AI 后启用）" style="font-size:9px;padding:0 4px;border:none;background:rgba(107,114,128,0.6);color:#fff;border-radius:3px;cursor:default;line-height:1.6;opacity:0.7">🎚超清</button>
-          <button data-srevert title="恢复原图" style="display:none;font-size:9px;padding:0 4px;border:none;background:rgba(220,38,38,0.85);color:#fff;border-radius:3px;cursor:pointer;line-height:1.6">↩</button>
-        </div>
-      </div>`;
-    };
-    const imgs=rows.map(imgWrap).join("");
-    box.innerHTML=(rows.length?`<div style="display:flex;flex-wrap:wrap;margin-bottom:5px">${imgs}</div>`:'<div style="margin-bottom:5px">还没有人上传，到现场的你可以发第一条实拍</div>')
+    const imgs=rows.map(r=>`<a href="${r.img}" target="_blank" rel="noopener" title="点击查看大图" style="display:block;width:76px;height:76px;border-radius:6px;overflow:hidden;border:1px solid #e2e8f0;background:#fff;flex:none"><img src="${r.img}" loading="lazy" alt="用户实拍" style="width:100%;height:100%;object-fit:cover;display:block"></a>`).join("");
+    box.innerHTML=(rows.length?`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:5px">${imgs}</div>`:'<div style="margin-bottom:5px">还没有人上传，到现场的你可以发第一条实拍</div>')
       +`<button class="btn btn-g btn-sm" data-spup="1" style="font-size:10.5px;padding:2px 9px">📤 上传我的实拍</button>`
-      +`<span style="font-size:10px;color:#94a3b8;margin-left:5px">需定位在「${spot.name}」20km 范围内，校验通过才能上传；照片<b>永久储存</b>，算法增强无水印</span>`;
+      +`<span style="font-size:10px;color:#94a3b8;margin-left:5px">需定位在「${spot.name}」20km 范围内，校验通过才能上传；照片公开展示 ${SPOT_PHOTO_TTL_DAYS} 天后自动从云端清除</span>`;
     box.querySelector("[data-spup]").addEventListener("click",()=>spotPhotoUpload(spot,box));
-    // 绑定每张图的增强/恢复/AI 超清按钮事件
-    box.querySelectorAll("[data-sphoto]").forEach(w=>{
-      const img=w.querySelector("img"),enhanceBtn=w.querySelector("[data-senhance]"),revertBtn=w.querySelector("[data-srevert]"),upscaleBtn=w.querySelector("[data-supscale]");
-      enhanceBtn.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();enhanceOnePhoto(img,enhanceBtn,revertBtn);});
-      revertBtn.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();img.src=img.dataset.original;delete img.dataset.enhanced;enhanceBtn.style.display="";revertBtn.style.display="none";});
-      upscaleBtn.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();toast("🎚 AI 超清即将上线（Cloudflare Workers AI 接入后启用，每次增强约 2-5s 推理）");});
-    });
   };
   if(!window.QYBridge){box.innerHTML='<span style="font-size:10.5px;color:#94a3b8">云端模块未就绪，暂不可上传</span>';return;}
   try{
     const client=await QYBridge._getClient();if(!client)throw new Error("no client");
-    // 不再按 TTL 截断，全部历史照片都展示（永久储存）
-    const r=await client.from("spot_photos").select("id,img,created_at").eq("spot_key",spot.name).order("created_at",{ascending:false}).limit(12);
+    const cutoff=new Date(Date.now()-SPOT_PHOTO_TTL_DAYS*864e5).toISOString();
+    // 自动清除过期云端数据（每浏览器每天最多触发一次，尽力而为）
+    const gk="spotPhotoGcDay",today=new Date().toISOString().slice(0,10);
+    if(localStorage.getItem(gk)!==today){localStorage.setItem(gk,today);client.from("spot_photos").delete().lt("created_at",cutoff).then(()=>{}).catch(()=>{});}
+    const r=await client.from("spot_photos").select("id,img,created_at").eq("spot_key",spot.name).gte("created_at",cutoff).order("created_at",{ascending:false}).limit(12);
     if(r.error)throw r.error;
     paint(r.data||[]);
   }catch(e){
     box.innerHTML='<span style="font-size:10.5px;color:#94a3b8">云端实拍暂不可用（spot_photos 表未创建或当前离线）</span>';
   }
-}
-/* 单张照片 Canvas 增强：异步加载原图→画离屏 Canvas→跑算法→替换 src（原图保留在 data-original 上可恢复） */
-function enhanceOnePhoto(imgEl,enhanceBtn,revertBtn){
-  enhanceBtn.style.opacity="0.5";enhanceBtn.style.cursor="wait";
-  const src=imgEl.dataset.original||imgEl.src;
-  const tmp=new Image();tmp.crossOrigin="anonymous";
-  tmp.onload=()=>{
-    const sc=Math.min(1,1600/Math.max(tmp.width,tmp.height)); // 限 1600px 内保证手机端也快
-    const cv=document.createElement("canvas");cv.width=Math.max(1,Math.round(tmp.width*sc));cv.height=Math.max(1,Math.round(tmp.height*sc));
-    cv.getContext("2d").drawImage(tmp,0,0,cv.width,cv.height);
-    try{
-      const up=enhancePhotoCanvas(cv);
-      imgEl.src=up;imgEl.dataset.enhanced="1";
-      enhanceBtn.textContent="✨已优化";enhanceBtn.style.opacity="";enhanceBtn.style.cursor="pointer";enhanceBtn.style.background="rgba(21,128,61,0.85)";
-      revertBtn.style.display="";
-    }catch(ex){enhanceBtn.style.opacity="";enhanceBtn.style.cursor="pointer";toast("增强失败："+(ex.message||ex));}
-  };
-  tmp.onerror=()=>{enhanceBtn.style.opacity="";enhanceBtn.style.cursor="pointer";toast("图片加载失败，无法增强");};
-  tmp.src=src;
 }
 function spotPhotoUpload(spot,box){
   if(!navigator.geolocation){toast("当前浏览器不支持定位，无法校验拍摄范围");return;}
@@ -6905,7 +6859,7 @@ function spotPhotoSend(spot,box,file){
         const client=await QYBridge._getClient();if(!client)throw new Error("no client");
         const r=await client.from("spot_photos").insert({spot_key:spot.name,img:dataUrl});
         if(r.error)throw r.error;
-        toast(`✅ 已上传！永久储存，其他用户立即可见；右侧「✨增强」可对任意照片做 Canvas 算法优化（无水印）`);
+        toast(`✅ 已上传！其他用户现在也能看到（${SPOT_PHOTO_TTL_DAYS} 天后自动清除）`);
         renderSpotPhotos(spot,box);
       }catch(e){toast("上传失败：云端 spot_photos 表未就绪或网络异常");}
     };
