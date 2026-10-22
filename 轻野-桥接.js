@@ -460,6 +460,7 @@
         if (!cfg) return false;
         var cs = global.CloudShield;
         if (cfg.siteStatus) cs.Store.json('siteStatus', cfg.siteStatus);
+        if (cfg.announcement) cs.Store.json('announcement', cfg.announcement);
         if (Array.isArray(cfg.donationAmounts)) {
           cs.Channel.write('donationAmounts', cfg.donationAmounts).catch(function () {});
         }
