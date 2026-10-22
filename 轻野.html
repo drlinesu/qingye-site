@@ -336,11 +336,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610221719" defer></script>
-<script src="轻野-桥接.js?v=202610221719" defer></script>
-<script src="轻野-启程.js?v=202610221719" defer></script>
-<script src="轻野-捐赠.js?v=202610221719" defer></script>
-<script src="轻野-云仓.js?v=202610221719" defer></script>
+<script src="轻野-云盾.js?v=202610221737" defer></script>
+<script src="轻野-桥接.js?v=202610221737" defer></script>
+<script src="轻野-启程.js?v=202610221737" defer></script>
+<script src="轻野-捐赠.js?v=202610221737" defer></script>
+<script src="轻野-云仓.js?v=202610221737" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -401,7 +401,8 @@
       </div>
     </div>
     <div class="hbtns">
-      <button class="hbtn" onclick="openSettings()">⚙ 费率与地图设置</button>
+      <button class="hbtn" id="qyTravelerBtn" onclick="openTravelerModal()">🧳 旅者</button>
+      <button class="hbtn" onclick="openSettings()">⚙ 设置</button>
     </div>
   </div>
 </header>
@@ -766,6 +767,30 @@
       <button class="btn btn-p" style="flex:1" onclick="saveSettings()">保存</button>
       <button class="btn btn-g" onclick="resetRates()">重置默认</button>
     </div>
+  </div>
+</div>
+
+<div class="modal" id="travelerModal">
+  <div class="mbox" style="max-width:420px">
+    <h3>🧳 旅者登入 <button class="cx" onclick="closeTravelerModal()">✕</button></h3>
+    <div style="font-size:12.5px;color:#475569;line-height:1.75;margin-bottom:12px">
+      欢迎来到轻野 · 旅行费用计算器。
+      <div style="margin-top:6px;padding:10px;background:#f0fdf4;border:1px dashed #86efac;border-radius:8px;font-size:12px;color:#166534;line-height:1.8">
+        ✅ 旅者（默认）：可查看<b>地点名字和 AI 样片</b><br>
+        🔒 高级功能需登入：📷 出片引擎 · 🍜 当地美食推荐 · 🏨 住宿参考价<br>
+        ✨ 登入后全部解锁（无需邮箱密码，可选填昵称）
+      </div>
+    </div>
+    <div style="margin-bottom:10px">
+      <label class="fl">昵称（可选，留空自动生成）</label>
+      <input type="text" id="trvNick" placeholder="如：山风旅人" maxlength="12" style="width:100%;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;box-sizing:border-box">
+    </div>
+    <div id="trvErr" style="color:#dc2626;font-size:12px;min-height:16px"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button id="trvJoin" class="btn btn-p" style="flex:1" onclick="confirmTravelerJoin()">🚶 以旅者身份登入</button>
+      <button id="trvOut" class="btn btn-g" style="flex:1;display:none" onclick="travelerSignOut()">🚪 退出旅者</button>
+    </div>
+    <div style="font-size:11px;color:#94a3b8;margin-top:10px;text-align:center">仅存本机浏览器 · 换设备可重新登入</div>
   </div>
 </div>
 
@@ -2491,6 +2516,85 @@ function dayHtml(m,res){
     +`<table style="width:100%;border-collapse:collapse;font-size:12.5px">`
     +rows.map(r=>`<tr style="border-top:1px solid var(--line)"><td style="padding:6px 4px">${r[0]}</td><td style="padding:6px 4px;text-align:right;white-space:nowrap">¥${fmt(r[1])}</td></tr>`).join("")
     +`<tr style="border-top:2px solid var(--line)"><td style="padding:7px 4px;font-weight:800">合计（${res.legs===2?"往返":""}${res.p}人）· 日均 ¥${fmt(sum/rows.length)}</td><td style="padding:7px 4px;text-align:right;font-weight:800;color:#0f766e">¥${fmt(sum)}</td></tr></table>`;
+}
+
+/* ================= 旅者模式（轻量本地会话 · 无需邮箱密码） ================= */
+let __traveler=null;
+(function(){
+  try{const raw=localStorage.getItem("qy_traveler");if(raw){const o=JSON.parse(raw);if(o&&o.ts){__traveler=o;}}}catch(e){}
+})();
+/* 同步 header 按钮文案 */
+function _syncTravelerBtn(){
+  const btn=$("qyTravelerBtn");
+  if(!btn)return;
+  if(__traveler){
+    btn.textContent="🧳 "+(__traveler.nick||"旅者");
+    btn.title="已以旅者身份登入 · 点击查看 / 退出";
+    btn.style.background="rgba(16,185,129,.25)";
+    btn.style.borderColor="rgba(16,185,129,.5)";
+  }else{
+    btn.textContent="🧳 旅者";
+    btn.title="点击以旅者身份登入，解锁出片/美食/住宿推荐";
+    btn.style.background="rgba(255,255,255,.14)";
+    btn.style.borderColor="rgba(255,255,255,.25)";
+  }
+}
+window._syncTravelerBtn=_syncTravelerBtn;
+/* 打开旅者模态（登入 / 退出） */
+function openTravelerModal(){
+  const m=$("travelerModal");if(!m)return;
+  m.classList.add("show");
+  if(__traveler){
+    const nick=$("trvNick");const join=$("trvJoin");const out=$("trvOut");
+    const err=$("trvErr");if(err)err.textContent="";
+    if(nick)nick.value=__traveler.nick||"";
+    if(join)join.style.display="none";
+    if(out)out.style.display="inline-block";
+  }else{
+    const nick=$("trvNick");const join=$("trvJoin");const out=$("trvOut");
+    const err=$("trvErr");if(err)err.textContent="";
+    if(nick)nick.value="";
+    if(join)join.style.display="inline-block";
+    if(out)out.style.display="none";
+  }
+}
+function closeTravelerModal(){$("travelerModal")?.classList.remove("show");}
+/* 确认旅者登入（可选昵称，无昵称自动生成） */
+function confirmTravelerJoin(){
+  const nick=$("trvNick")?.value.trim()||"";
+  const n=nick||"旅人"+Math.floor(Math.random()*9000+1000);
+  __traveler={nick:n,ts:Date.now()};
+  try{localStorage.setItem("qy_traveler",JSON.stringify(__traveler));}catch(e){}
+  _syncTravelerBtn();
+  closeTravelerModal();
+  render();
+  toast("欢迎，"+n+" ✨ 已解锁出片/美食/住宿");
+}
+/* 旅者退出 */
+function travelerSignOut(){
+  __traveler=null;
+  try{localStorage.removeItem("qy_traveler");}catch(e){}
+  _syncTravelerBtn();
+  closeTravelerModal();
+  render();
+  toast("已退出旅者模式");
+}
+/* 权限检查：未登入则弹旅者模态并返回 false */
+function __requireTraveler(){
+  if(__traveler)return true;
+  openTravelerModal();
+  toast("请先以旅者身份登入，解锁全部功能");
+  return false;
+}
+window.__requireTraveler=__requireTraveler;
+/* 锁态 HTML：用于未登入时屏蔽美食/住宿等高级功能 */
+function _lockHtml(title,tip){
+  return `<div style="text-align:center;padding:20px 16px;background:linear-gradient(135deg,#fefce8,#fef9c3);border:1px dashed #fde047;border-radius:10px">
+    <div style="font-size:28px;margin-bottom:8px">🔒</div>
+    <div style="font-size:13.5px;font-weight:600;color:#92400e;margin-bottom:4px">${title} · 旅者专属</div>
+    <div style="font-size:12px;color:#78350f;margin-bottom:12px">${tip}</div>
+    <button class="btn btn-p" style="padding:6px 16px;font-size:12.5px" onclick="openTravelerModal()">🚶 以旅者身份登入</button>
+  </div>`;
 }
 
 /* ================= 渲染 ================= */
@@ -6269,6 +6373,12 @@ function renderHotelGuide(city,force){
     if(_lastHotelName){el.innerHTML='<div style="font-size:12.5px;color:var(--muted)">填写目的地后，结合出行日期、淡旺季、你已添加的优惠券，给出酒店/民宿/青旅参考价与房态紧张度</div>';occ.innerHTML="";lk.innerHTML="";meta.textContent="晚数/间数跟随左侧行程";renderHotelMarks([],null);_lastHotelName="";}
     return;
   }
+  // 旅者权限门控：未登入显示锁态
+  if(!__traveler){
+    el.innerHTML=_lockHtml("🏨 当地住宿参考价","填写目的地后，结合出行日期、淡旺季、你已添加的优惠券，给出酒店/民宿/青旅参考价与房态紧张度");
+    occ.innerHTML="";lk.innerHTML="";
+    return;
+  }
   const name=city[0];
   if(!force&&name===_lastHotelName)return;
   _lastHotelName=name;_hotelCity=city;
@@ -6385,6 +6495,12 @@ function renderFoodGuide(city){
   const mealTotal=mealRate*people*stay;
   const el=$("foodGuide");const lk=$("foodLinks");
   if(!city){if(_lastFoodCity){el.innerHTML='<div style="font-size:12.5px;color:var(--muted)">填写目的地后自动展示当地特色饮食与外卖参考价，可在下方设置中调整餐饮日预算</div>';lk.innerHTML='';_lastFoodCity="";}return;}
+  // 旅者权限门控：未登入显示锁态
+  if(!__traveler){
+    el.innerHTML=_lockHtml("🍜 当地特色美食推荐","填写目的地后自动展示当地特色饮食与外卖参考价，可在下方设置中调整餐饮日预算");
+    lk.innerHTML="";
+    return;
+  }
   const name=city[0];
   if(name===_lastFoodCity)return; // 目的地未变，跳过重渲染
   _lastFoodCity=name;
@@ -6745,6 +6861,7 @@ function onSampleImgError(img){
 }
 /* renderPhotoGuide 的参数安全桥接：从内联 HTML 参数构建 spot 对象（kw=全网检索词） */
 function renderPhotoGuideByArgs(lat,lng,name,tier,facing,kw,btnEl){
+  if(!__requireTraveler())return; // 旅者权限门控
   const spot={coords:[+lat,+lng],name,tier,facing,kw:kw||""};
   renderPhotoGuide(spot,btnEl);
 }
@@ -7118,6 +7235,7 @@ function scenicFilterSet(btn){
 }
 let _scenicCityTimer=null;
 document.addEventListener("DOMContentLoaded",()=>{
+  _syncTravelerBtn(); // 初始化旅者按钮状态
   const inp=$("scenicCity");if(!inp)return;
   inp.value=state.scenicCity||"";
   inp.addEventListener("input",()=>{
