@@ -74,7 +74,7 @@
   .warn{background:var(--amber-soft);color:#92400e;font-size:11px;padding:7px 12px;border-radius:8px;margin:0 16px 12px}
   /* .mode 折叠内容：JS 动态写 max-height（关闭也有过渡） */
   .mdetail{max-height:0;overflow:hidden;border-top:0 solid transparent;padding:0 16px;background:#fafcff;font-size:12.5px;transition:max-height .35s cubic-bezier(.4,0,.2,1),padding .35s cubic-bezier(.4,0,.2,1),border-top-width .35s cubic-bezier(.4,0,.2,1);will-change:max-height}
-  .mode.open .mdetail{padding:12px 16px;border-top:1px dashed var(--line)}
+  .mode.open .mdetail{padding:12px 16px;border-top:1px dashed var(--line);max-height:1px} /* max-height:1px 是 CSS floor：避免 classList toggle 到 JS rAF 设置 maxHeight 之间的 1 帧 flash（JS 会立即覆盖为实测高度） */
   .mdetail table{width:100%;border-collapse:collapse}
   .mdetail td{padding:6px 0;color:var(--slate)}
   .mdetail td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;color:var(--ink)}
@@ -330,11 +330,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610221701" defer></script>
-<script src="轻野-桥接.js?v=202610221701" defer></script>
-<script src="轻野-启程.js?v=202610221701" defer></script>
-<script src="轻野-捐赠.js?v=202610221701" defer></script>
-<script src="轻野-云仓.js?v=202610221701" defer></script>
+<script src="轻野-云盾.js?v=202610221707" defer></script>
+<script src="轻野-桥接.js?v=202610221707" defer></script>
+<script src="轻野-启程.js?v=202610221707" defer></script>
+<script src="轻野-捐赠.js?v=202610221707" defer></script>
+<script src="轻野-云仓.js?v=202610221707" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -1245,9 +1245,15 @@ function verifyCompute(res,R,ctFare,interFare,lh){
     const rePer=rebuild/res.p;
     if(Math.abs(rePer-m.per)/Math.max(1,rePer)>W)
       console.warn(`[轻野复核] ${m.key} per 偏差`);
-    // 时长验算（独立路径重算 legHours）
-    const lhFun={rail:()=>lh("rail",res.rail,R),flight:()=>lh("flight",res.air,R),bus:()=>lh("bus",res.road,R),drive:()=>lh("drive",res.road,R),taxi:()=>lh("taxi",res.road,R)}[m.key];
-    if(lhFun){const reh=lhFun();if(Math.abs(reh-m.h)/Math.max(.01,reh)>W)console.warn(`[轻野复核] ${m.key} hours 偏差：${reh} vs ${m.h}`);}
+  // 时长验算（完全独立公式，不调用原 legHours 函数，但保持相同的 round 1 位小数逻辑）
+  const lhIndep={
+    rail:km=>Math.round(km/235*10)/10,
+    flight:km=>Math.round((km/750+25/60)*10)/10,
+    bus:km=>Math.round((km/78+km/300*15/60)*10)/10,
+    drive:km=>Math.round((km/85+km/300*15/60+10/60)*10)/10,
+    taxi:km=>Math.round((km/75+15/60)*10)/10
+  }[m.key];
+  if(lhIndep){const reh=lhIndep(m.km);if(Math.abs(reh-m.h)/Math.max(.01,reh)>W)console.warn(`[轻野复核] ${m.key} hours 偏差：独立式${reh.toFixed(2)} vs ${m.h.toFixed(2)}`);}
   });
 }
 function kmLabel(km){return Math.round(km)+"km";}
@@ -7302,7 +7308,13 @@ function saveSettings(){
 }
 function resetRates(){state.rates={...DEFAULTS};save();openSettings();render();toast("已恢复默认费率");}
 
-function toggleAll(){document.querySelectorAll(".mode").forEach(m=>m.classList.toggle("open"));}
+function toggleAll(){
+  const ml=$("modeList");if(!ml)return;
+  const allOpen=[...ml.querySelectorAll(".mode")].every(m=>m.classList.contains("open"));
+  // 若全部已开 → 全关；否则全开（行为比"每次简单 toggle"更直观）
+  if(window._toggleAllAnimated)window._toggleAllAnimated(!allOpen);
+  else ml.querySelectorAll(".mode").forEach(m=>m.classList.toggle("open"));
+}
 function copySummary(){
   window._flushForm&&window._flushForm();
   const res=window._lastRes;if(!res)return;
@@ -7404,13 +7416,18 @@ document.querySelectorAll("details.card").forEach(d=>{
 /* .mode 开/关动画：事件代理接管 max-height 动画，classList 切换由 .mhead 内联 onclick 自行处理 */
 document.addEventListener("DOMContentLoaded",()=>{
   const ml=$("modeList");if(!ml)return;
-  const initMode=md=>{
-    const isOpen=md.parentElement.classList.contains("open");
-    md.style.contentVisibility="visible";
-    md.style.maxHeight=isOpen?(md.scrollHeight||1500)+"px":"0px";
-    md.style.contentVisibility="";
+  // 批量化 init：一次 layout pass 读完所有 scrollHeight
+  const batchInit=()=>{
+    const mds=document.querySelectorAll("#modeList .mdetail");
+    if(!mds.length)return;
+    mds.forEach(md=>md.style.contentVisibility="visible");
+    mds.forEach(md=>{
+      const isOpen=md.parentElement.classList.contains("open");
+      md.style.maxHeight=isOpen?(md.scrollHeight||1500)+"px":"0px";
+    });
+    requestAnimationFrame(()=>{mds.forEach(md=>md.style.contentVisibility="");});
   };
-  const animateMode=(md,opening)=>{
+  const animateOne=(md,opening)=>{
     md.style.contentVisibility="visible";
     if(opening){
       md.style.maxHeight="0px";
@@ -7422,18 +7439,23 @@ document.addEventListener("DOMContentLoaded",()=>{
     }
     setTimeout(()=>{md.style.contentVisibility=""},400);
   };
-  // 事件代理：拦截 modeList 内 .mhead 的 click，延迟一拍执行动画（让 classList 先 toggle 完）
   ml.addEventListener("click",e=>{
     const head=e.target.closest(".mode .mhead");if(!head)return;
     const mode=head.parentNode;const md=mode.querySelector(".mdetail");if(!md)return;
-    // 等内联 onclick 执行完（microtask 之后），读取真实 open 状态再做动画
-    requestAnimationFrame(()=>{
-      const isOpenNow=mode.classList.contains("open");
-      animateMode(md,isOpenNow);
-    });
+    requestAnimationFrame(()=>{animateOne(md,mode.classList.contains("open"));});
   },{passive:true});
-  window._modeInitAfterRender=()=>{
-    document.querySelectorAll("#modeList .mdetail").forEach(md=>initMode(md));
+  window._modeInitAfterRender=batchInit;
+  // toggleAll 全局展开/收起：先全部切 class + 同步把 maxHeight 设为测量值，保证 JS 跟上 CSS 状态
+  window._toggleAllAnimated=(allOpen)=>{
+    const modes=document.querySelectorAll("#modeList .mode");
+    const mds=[...modes].map(m=>m.querySelector(".mdetail")).filter(Boolean);
+    modes.forEach(m=>{allOpen?m.classList.add("open"):m.classList.remove("open");});
+    mds.forEach(md=>md.style.contentVisibility="visible");
+    mds.forEach(md=>{
+      const isOpen=md.parentElement.classList.contains("open");
+      md.style.maxHeight=isOpen?(md.scrollHeight||1500)+"px":"0px";
+    });
+    requestAnimationFrame(()=>{mds.forEach(md=>md.style.contentVisibility="");});
   };
 });
 /* 轻旅行展开时提升为 main 直接子元素、跨两列全宽（落在结果/地图下方，不遮挡地图）；收起动画结束后移回左列 */
