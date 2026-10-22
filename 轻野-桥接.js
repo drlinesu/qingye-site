@@ -202,6 +202,59 @@
       });
     },
 
+    /* ---------- 服务器容量门禁（检查 Supabase 额度是否已满） ----------
+       策略：从 config 表读 storage_status 字段（'ok' / 'near_full' / 'full'），
+       缓存 5 分钟避免频繁查询；查询失败降级为 ok（放行）防止网络抖动误伤。
+       - near_full：允许 Auth 登录，但禁止用户数据上传（实际花费、用户实拍等）
+       - full：    禁止所有写入（含 Auth） */
+    _capCache: null,
+    _capCacheUntil: 0,
+    _CAP_BLOCK_MSG: '旅者漫漫，我们需要时间来整理你们的日记——服务器额度已满',
+    checkCapacity: function (opts) {
+      var self = this;
+      var now = Date.now();
+      opts = opts || {};
+      /* 命中 5 分钟本地缓存直接返回 */
+      if (self._capCache && now < self._capCacheUntil) {
+        return Promise.resolve(self._capCache);
+      }
+      return self.getConfig().then(function (cfg) {
+        var status = 'ok';
+        if (cfg && typeof cfg === 'object') {
+          status = (cfg.storage_status || cfg.storage_health || 'ok').toString().toLowerCase();
+        }
+        if (!/^(ok|near_full|full)$/.test(status)) status = 'ok';
+        var result = {
+          level: status,
+          ok: true,                  // 总体可用（不代表每次写入都会被放行）
+          authOk: status !== 'full',  // full 连 Auth 也拦
+          uploadOk: status === 'ok',  // 只有 ok 才放行上传
+          msg: status !== 'ok' ? self._CAP_BLOCK_MSG : ''
+        };
+        self._capCache = result;
+        self._capCacheUntil = now + 5 * 60 * 1000; // 5 分钟缓存
+        return result;
+      }).catch(function () {
+        /* 查询失败 → 降级为 ok（放行），避免网络抖动导致全站不可用 */
+        return { level: 'ok', ok: true, authOk: true, uploadOk: true, msg: '' };
+      });
+    },
+    /* 辅助：判断某类操作是否被容量门禁拦截
+       kind: 'auth' | 'upload'
+       返回 null 表示放行；返回错误对象表示应中止并提示用户 */
+    _capGate: function (kind) {
+      var self = this;
+      return self.checkCapacity().then(function (cap) {
+        if (kind === 'auth' && !cap.authOk) {
+          return { ok: false, code: 'server_full', msg: cap.msg };
+        }
+        if (kind === 'upload' && !cap.uploadOk) {
+          return { ok: false, code: 'server_full', msg: cap.msg };
+        }
+        return null;
+      });
+    },
+
     /* ---------- 邮箱验证码登录（Supabase Auth Email OTP） ---------- */
     /* GoTrue 错误码 → 中文文案；后端不可用统一 code:'unavailable' 供云盾降级演示模式 */
     _authErr: function (err) {
@@ -224,45 +277,49 @@
     /* 发送邮箱验证码（新用户自动注册）。成功 {ok:true}；后端不可用 {ok:false,code:'unavailable'} */
     sendEmailOtp: function (email) {
       var self = this;
-      return self._getClient().then(function (client) {
-        if (!client) return { ok: false, code: 'unavailable' };
-        return client.auth.signInWithOtp({ email: String(email), options: { shouldCreateUser: true } })
-          .then(function (res) {
-            if (res && res.error) return self._authErr(res.error);
-            return { ok: true };
-          })
-          .catch(function (e) {
-            var t = self._authErr(e);
-            /* 网络层故障（fetch failed / NetworkError / Failed to fetch）→ 触发降级 */
-            var raw = String((e && (e.message || e.name)) || '').toLowerCase();
-            if (raw.indexOf('fetch') >= 0 || raw.indexOf('network') >= 0 || raw.indexOf('load failed') >= 0) t.code = 'unavailable';
-            return t;
-          });
-      }).catch(function () { return { ok: false, code: 'unavailable' }; });
+      return self._capGate('auth').then(function (blocked) {
+        if (blocked) return blocked;
+        return self._getClient().then(function (client) {
+          if (!client) return { ok: false, code: 'unavailable' };
+          return client.auth.signInWithOtp({ email: String(email), options: { shouldCreateUser: true } })
+            .then(function (res) {
+              if (res && res.error) return self._authErr(res.error);
+              return { ok: true };
+            })
+            .catch(function (e) {
+              var t = self._authErr(e);
+              var raw = String((e && (e.message || e.name)) || '').toLowerCase();
+              if (raw.indexOf('fetch') >= 0 || raw.indexOf('network') >= 0 || raw.indexOf('load failed') >= 0) t.code = 'unavailable';
+              return t;
+            });
+        }).catch(function () { return { ok: false, code: 'unavailable' }; });
+      });
     },
     /* 注册新账号（邮箱+密码）：GoTrue 创建用户并发确认邮件，码用 type:'signup' 校验 */
     signUpEmail: function (email, password) {
       var self = this;
-      return self._getClient().then(function (client) {
-        if (!client) return { ok: false, code: 'unavailable' };
-        return client.auth.signUp({
-          email: String(email),
-          password: String(password),
-          options: { emailRedirectTo: global.location.origin }
-        }).then(function (res) {
-          if (res && res.error) return self._authErr(res.error);
-          /* GoTrue 防枚举：邮箱已存在时返回 identities 为空数组且不发信 */
-          var u = res && res.data && res.data.user;
-          if (u && Array.isArray(u.identities) && u.identities.length === 0)
-            return { ok: false, code: 'exists', msg: '该邮箱已注册，请直接用验证码登录' };
-          return { ok: true };
-        }).catch(function (e) {
-          var t = self._authErr(e);
-          var raw = String((e && (e.message || e.name)) || '').toLowerCase();
-          if (raw.indexOf('fetch') >= 0 || raw.indexOf('network') >= 0 || raw.indexOf('load failed') >= 0) t.code = 'unavailable';
-          return t;
-        });
-      }).catch(function () { return { ok: false, code: 'unavailable' }; });
+      return self._capGate('auth').then(function (blocked) {
+        if (blocked) return blocked;
+        return self._getClient().then(function (client) {
+          if (!client) return { ok: false, code: 'unavailable' };
+          return client.auth.signUp({
+            email: String(email),
+            password: String(password),
+            options: { emailRedirectTo: global.location.origin }
+          }).then(function (res) {
+            if (res && res.error) return self._authErr(res.error);
+            var u = res && res.data && res.data.user;
+            if (u && Array.isArray(u.identities) && u.identities.length === 0)
+              return { ok: false, code: 'exists', msg: '该邮箱已注册，请直接用验证码登录' };
+            return { ok: true };
+          }).catch(function (e) {
+            var t = self._authErr(e);
+            var raw = String((e && (e.message || e.name)) || '').toLowerCase();
+            if (raw.indexOf('fetch') >= 0 || raw.indexOf('network') >= 0 || raw.indexOf('load failed') >= 0) t.code = 'unavailable';
+            return t;
+          });
+        }).catch(function () { return { ok: false, code: 'unavailable' }; });
+      });
     },
     /* 校验邮箱验证码。type：'email'（登录/OTP）或 'signup'（注册确认邮件），GoTrue 内部区分 */
     verifyEmailOtp: function (email, token, otpType) {
@@ -287,28 +344,31 @@
     /* 邮箱+密码登录（注册时已设置密码的用户） */
     signInPassword: function (email, password) {
       var self = this;
-      return self._getClient().then(function (client) {
-        if (!client) return { ok: false, code: 'unavailable' };
-        return client.auth.signInWithPassword({ email: String(email), password: String(password) })
-          .then(function (res) {
-            var err = res && res.error;
-            if (err) {
-              var raw = String(err.message || err.msg || err.code || '').toLowerCase();
+      return self._capGate('auth').then(function (blocked) {
+        if (blocked) return blocked;
+        return self._getClient().then(function (client) {
+          if (!client) return { ok: false, code: 'unavailable' };
+          return client.auth.signInWithPassword({ email: String(email), password: String(password) })
+            .then(function (res) {
+              var err = res && res.error;
+              if (err) {
+                var raw = String(err.message || err.msg || err.code || '').toLowerCase();
+                if (raw.indexOf('invalid login credentials') >= 0 || raw.indexOf('email not confirmed') >= 0)
+                  return { ok: false, code: 'bad_credentials', msg: '邮箱或密码不正确（未设置过密码请用验证码登录）' };
+                return self._authErr(err);
+              }
+              return { ok: true, userId: res.data && res.data.user ? res.data.user.id : null };
+            })
+            .catch(function (e) {
+              var raw = String((e && (e.message || e.name)) || '').toLowerCase();
               if (raw.indexOf('invalid login credentials') >= 0 || raw.indexOf('email not confirmed') >= 0)
                 return { ok: false, code: 'bad_credentials', msg: '邮箱或密码不正确（未设置过密码请用验证码登录）' };
-              return self._authErr(err);
-            }
-            return { ok: true, userId: res.data && res.data.user ? res.data.user.id : null };
-          })
-          .catch(function (e) {
-            var raw = String((e && (e.message || e.name)) || '').toLowerCase();
-            if (raw.indexOf('invalid login credentials') >= 0 || raw.indexOf('email not confirmed') >= 0)
-              return { ok: false, code: 'bad_credentials', msg: '邮箱或密码不正确（未设置过密码请用验证码登录）' };
-            var t = self._authErr(e);
-            if (raw.indexOf('fetch') >= 0 || raw.indexOf('network') >= 0 || raw.indexOf('load failed') >= 0) t.code = 'unavailable';
-            return t;
-          });
-      }).catch(function () { return { ok: false, code: 'unavailable' }; });
+              var t = self._authErr(e);
+              if (raw.indexOf('fetch') >= 0 || raw.indexOf('network') >= 0 || raw.indexOf('load failed') >= 0) t.code = 'unavailable';
+              return t;
+            });
+        }).catch(function () { return { ok: false, code: 'unavailable' }; });
+      });
     },
 
     /* 读取 waf_logs（管理端） */
