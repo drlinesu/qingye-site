@@ -314,6 +314,12 @@
   .sampleImgBox.loaded .sampleImgEl{display:block;animation:fadeIn .45s ease}
   .sampleImgBox.loaded{cursor:default}
   @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  /* 样片：单并发队列 + 模拟进度条 */
+  .sampleProgress{position:absolute;bottom:0;left:0;width:0%;height:3px;background:linear-gradient(90deg,#10b981,#06b6d4);border-radius:0 0 6px 6px;transition:width .2s linear;z-index:3;box-shadow:0 0 4px rgba(16,185,129,.5)}
+  .sampleProgressText{position:absolute;top:6px;right:8px;font-size:9.5px;color:#fff;background:rgba(0,0,0,.5);padding:1px 6px;border-radius:8px;z-index:4;backdrop-filter:blur(3px);display:none}
+  .sampleImgBox.loading .sampleProgress{display:block}
+  .sampleImgBox.loading .sampleProgressText{display:block}
+  .sampleImgDisclaimer{font-size:10px;color:#64748b;margin-top:2px;line-height:1.4}
 </style>
 <link rel="preconnect" href="https://trae-api-cn.mchost.guru" crossorigin>
 <link rel="dns-prefetch" href="//trae-api-cn.mchost.guru">
@@ -330,11 +336,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610221707" defer></script>
-<script src="轻野-桥接.js?v=202610221707" defer></script>
-<script src="轻野-启程.js?v=202610221707" defer></script>
-<script src="轻野-捐赠.js?v=202610221707" defer></script>
-<script src="轻野-云仓.js?v=202610221707" defer></script>
+<script src="轻野-云盾.js?v=202610221716" defer></script>
+<script src="轻野-桥接.js?v=202610221716" defer></script>
+<script src="轻野-启程.js?v=202610221716" defer></script>
+<script src="轻野-捐赠.js?v=202610221716" defer></script>
+<script src="轻野-云仓.js?v=202610221716" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -5057,6 +5063,8 @@ function renderWalkRow(s){
   const facing=s.view==="sunrise"?"东":s.view==="sunset"?"西":"";
   const p=[s.c[0],s.c[1],"'"+String(s.n).replace(/'/g,"\\'")+"'","'"+tier+"'","'"+facing+"'","'"+String(s.kw||"").replace(/'/g,"\\'")+"'"].join(",");
   const tags=(s.tags||[]).map(t=>`<span style="background:#cffafe;color:#155e75;padding:0 5px;border-radius:4px;font-size:10px;margin-right:3px">${t}</span>`).join("");
+  const _picPr="AI 写实风光摄影，8K超清，"+String(s.ter||"自然风光")+"，"+s.n+"，"+String(s.d||"")+"，"+(_scenicCityCur?"位于"+_scenicCityCur:"")+"，专业构图，真实色彩，氛围感强";
+  const _picUrl=T2I_BASE+"?prompt="+encodeURIComponent(_picPr)+"&image_size=landscape_4_3";
   return `<div style="margin-bottom:6px">
   <div class="sp-row" style="display:flex;align-items:center;gap:8px;background:#ecfeff;border:1px solid #a5f3fc;border-radius:8px 8px 0 0;padding:7px 10px;font-size:12.5px;cursor:pointer" title="点击在地图上定位" onclick="focusScenic(${s.c[0]},${s.c[1]})">
     <span style="font-size:18px">${s.e||"🚶"}</span>
@@ -5068,7 +5076,13 @@ function renderWalkRow(s){
     <span style="background:${crowdColor};color:#fff;font-size:10px;padding:1px 6px;border-radius:4px;white-space:nowrap">${crowdTxt}</span>
   </div>
   ${walkVisualBar(s)}
-  <div class="spPics" style="margin-top:5px"><img src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=${encodeURIComponent("Scenic travel photo of "+s.n+", "+(_scenicCityCur||"China")+", China. "+String(s.ter||"")+" "+String(s.d||"")+". Realistic landscape photography, natural light, vivid colors, popular aesthetic, high quality")}&image_size=landscape_4_3" loading="lazy" decoding="async" fetchpriority="low" alt="${s.n} 样片" title="${s.n} · AI 意境示意（非实景照片），真实照片见 📷 弹层与下方平台直达" style="width:100%;height:120px;object-fit:cover;display:block;border-radius:6px;background:#f1f5f9;border:1px solid #e2e8f0;opacity:0;transition:opacity .45s ease" onload="this.style.opacity=1" onerror="this.parentNode.style.display='none'"></div>
+  <div class="spPics" style="margin-top:5px">
+    <div class="sampleImgBox" data-url="${_picUrl}" onclick="loadSampleImg(this)" style="height:120px;border:1px solid #a5f3fc;background:linear-gradient(135deg,#ecfeff,#cffafe)">
+      <div class="sampleImgPlaceholder" style="color:#0e7490"><div class="sampleSpinner"></div><div class="sampleHint">📸 点击加载<br>AI 生成样片</div></div>
+      <img class="sampleImgEl" alt="${s.n} AI样片" decoding="async">
+    </div>
+    <div class="sampleImgDisclaimer">🌐 AI 基于全网数据重绘场景示意，非实景照片</div>
+  </div>
   </div>`;
 }
 /* AI 漫行分析头：综合今日天气、未来7天趋势、黄金昏时间、风力与海岸地形给建议 */
@@ -6661,12 +6675,65 @@ function spotSampleUrl(spot,kind){
   const prompt=[lightDesc,spot.name,land,likes,facing?`朝向${facing}`:"",quality].filter(Boolean).join("，");
   return `${T2I_BASE}?prompt=${encodeURIComponent(prompt)}&image_size=landscape_16_9`;
 }
-function loadSampleImg(box){ // 点击触发该样片优先加载（异步，不阻塞其他代码）
-  if(box.classList.contains("loading")||box.classList.contains("loaded"))return;
-  box.classList.add("loading");
-  const img=box.querySelector(".sampleImgEl");
-  img.src=box.dataset.url; // 浏览器异步加载，生成期间 spinner 旋转
+/* AI 样片加载：单并发优先级队列 + 模拟进度条（最新点击优先） */
+const _sampleQueue=[];let _sampleLoading=null;
+function _sampleEnqueue(box){
+  // 中止旧请求：当前在途和队列里所有其他请求都回到初始态
+  if(_sampleLoading&&_sampleLoading!==box){
+    _sampleLoading.querySelector(".sampleImgEl").src=""; // 取消浏览器对旧 URL 的请求
+    _sampleLoading.classList.remove("loading");
+    _sampleLoading._progressTimer&&clearInterval(_sampleLoading._progressTimer);
+    _sampleLoading.querySelector(".sampleProgress").style.width="0%";
+    _sampleLoading.querySelector(".sampleProgressText").textContent="0%";
+    _sampleLoading._progressTimer=null;
+  }
+  _sampleQueue.length=0; // 清空旧队列，最新点击排到队首
+  _sampleQueue.unshift(box);
+  _sampleNext();
 }
+function _sampleNext(){
+  if(_sampleLoading||!_sampleQueue.length)return;
+  const box=_sampleQueue.shift();
+  if(!box||box.classList.contains("loaded")){_sampleNext();return;}
+  _sampleLoading=box;
+  box.classList.add("loading");
+  // 确保进度条元素存在（render 时 HTML 可能未包含）
+  if(!box.querySelector(".sampleProgress")){
+    const bar=document.createElement("div");bar.className="sampleProgress";
+    const txt=document.createElement("div");txt.className="sampleProgressText";txt.textContent="0%";
+    box.appendChild(bar);box.appendChild(txt);
+  }
+  const img=box.querySelector(".sampleImgEl");
+  const bar=box.querySelector(".sampleProgress"),txt=box.querySelector(".sampleProgressText");
+  // 模拟进度：每 180ms 推进 3-6%，停在 85%（真实生成还在跑）
+  let p=0;
+  box._progressTimer=setInterval(()=>{
+    p=Math.min(85,p+Math.random()*4+2);
+    bar.style.width=p+"%";txt.textContent=Math.round(p)+"%";
+  },180);
+  img.onload=()=>{
+    if(box._progressTimer){clearInterval(box._progressTimer);box._progressTimer=null;}
+    bar.style.width="100%";txt.textContent="100%";
+    box.classList.remove("loading");
+    box.classList.add("loaded");
+    _sampleLoading=null;
+    _sampleNext();
+  };
+  img.onerror=()=>{
+    if(box._progressTimer){clearInterval(box._progressTimer);box._progressTimer=null;}
+    box.classList.remove("loading");
+    bar.style.width="0%";txt.textContent="";
+    const hint=box.querySelector(".sampleHint");if(hint){hint.textContent="⚠ 生成失败，点击重试";hint.style.display="block";}
+    _sampleLoading=null;
+    _sampleNext();
+  };
+  img.src=box.dataset.url;
+}
+function loadSampleImg(box){
+  if(box.classList.contains("loading")||box.classList.contains("loaded"))return;
+  _sampleEnqueue(box);
+}
+/* 保留兜底引用（旧调用或内联 onload 仍能命中） */
 function onSampleImgLoaded(img){img.parentElement.classList.add("loaded");img.parentElement.classList.remove("loading");}
 function onSampleImgError(img){
   const box=img.parentElement;box.classList.remove("loading");
@@ -6779,23 +6846,24 @@ async function renderPhotoGuide(spot,btnEl){
   // 日出·黄金20分 / 蓝调20分 AI 样片（结合地形画像生成 · 点击才加载 · 加载动画 · 不阻塞主线程）
   const gUrl=spotSampleUrl(spot,"golden"),bUrl=spotSampleUrl(spot,"blue");
   html+=`<div style="margin-bottom:8px">
-    <div style="font-size:11.5px;color:#475569;margin-bottom:4px">📸 出片窗口样例 <span style="font-size:10px;color:#94a3b8">（AI 结合地形细节生成 · 点击加载）</span></div>
+    <div style="font-size:11.5px;color:#475569;margin-bottom:4px">📸 出片窗口样例 <span style="font-size:10px;color:#94a3b8">（点击加载 · 进度实时显示）</span></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
       <figure style="flex:1 1 210px;min-width:0;margin:0">
         <div class="sampleImgBox golden" data-url="${gUrl}" onclick="loadSampleImg(this)" style="border:1px solid #fde68a;background:linear-gradient(135deg,#fef3c7,#fde68a)">
           <div class="sampleImgPlaceholder"><div class="sampleSpinner"></div><div class="sampleHint">🌅 点击生成<br>日出·黄金20分</div></div>
-          <img class="sampleImgEl" alt="日出·黄金20分 AI样片" loading="lazy" decoding="async" onload="onSampleImgLoaded(this)" onerror="onSampleImgError(this)">
+          <img class="sampleImgEl" alt="日出·黄金20分 AI样片" loading="lazy" decoding="async">
         </div>
         <figcaption style="font-size:10.5px;color:#78350f;margin-top:3px;line-height:1.6">🌅 <b>日出·黄金20分</b>：太阳刚跃出地平线，低角度暖光把雾气和山脊染成金色，长阴影层次最丰富</figcaption>
       </figure>
       <figure style="flex:1 1 210px;min-width:0;margin:0">
         <div class="sampleImgBox blue" data-url="${bUrl}" onclick="loadSampleImg(this)" style="border:1px solid #bfdbfe;background:linear-gradient(135deg,#eff6ff,#bfdbfe)">
           <div class="sampleImgPlaceholder"><div class="sampleSpinner"></div><div class="sampleHint">🌆 点击生成<br>蓝调20分</div></div>
-          <img class="sampleImgEl" alt="蓝调20分 AI样片" loading="lazy" decoding="async" onload="onSampleImgLoaded(this)" onerror="onSampleImgError(this)">
+          <img class="sampleImgEl" alt="蓝调20分 AI样片" loading="lazy" decoding="async">
         </div>
         <figcaption style="font-size:10.5px;color:#1e3a5f;margin-top:3px;line-height:1.6">🌆 <b>蓝调20分</b>：日落后天光呈靛蓝，街灯暖光刚亮起，冷暖对撞是城市/海岸夜景最易出片的窗口</figcaption>
       </figure>
     </div>
+    <div class="sampleImgDisclaimer">🌐 AI 基于全网数据重绘场景示意，非实景照片 · 真实照片请点下方平台直达</div>
   </div>`;
   // 用户实拍（云端共享 · 20km 地理围栏 · 7 天自动清除）
   html+=`<div style="margin-bottom:8px">
@@ -6947,8 +7015,9 @@ function renderScenicRow(s){
   <div class="spPics" style="margin-top:5px">
     <div class="sampleImgBox" data-url="${_picUrl}" onclick="loadSampleImg(this)" style="height:120px;border:1px solid #e2e8f0;background:linear-gradient(135deg,#f8fafc,#e2e8f0)">
       <div class="sampleImgPlaceholder" style="color:#475569"><div class="sampleSpinner"></div><div class="sampleHint">📸 点击加载<br>AI 生成样片</div></div>
-      <img class="sampleImgEl" alt="${s.name} AI样片" title="${s.name} · AI 结合地形细节生成（非实景照片），真实照片见 📷 弹层与下方平台直达" decoding="async" onload="onSampleImgLoaded(this)" onerror="onSampleImgError(this)">
+      <img class="sampleImgEl" alt="${s.name} AI样片" decoding="async">
     </div>
+    <div class="sampleImgDisclaimer">🌐 AI 基于全网数据重绘场景示意，非实景照片</div>
   </div>
   </div>`;
 }
@@ -7158,7 +7227,7 @@ function renderScenicGuide(city){
       ${filterViews}
       ${walkBlock}
       ${astroBlock}
-      <div style="margin-top:6px;font-size:11.5px;color:#64748b">💡 点击景点可在地图上定位；📷按钮查看AI出片时间建议；景点样片为 AI 意境示意（非实景照片），真实照片与视频请点 📷 弹层或下方平台直达</div>`;
+      <div style="margin-top:6px;font-size:11.5px;color:#64748b">💡 点击景点可在地图上定位；📷按钮查看 AI 出片时间建议 · 🌐 样片为 AI 基于全网数据重绘的场景示意，非实景照片 · 真实照片与视频请点 📷 弹层或下方平台直达</div>`;
   }
   /* 样片预热：图片接口为异步生成（首访返回占位图，后台生成完成后同 URL 才出真图）。
      列表一渲染就用隐藏 Image 低优先级错峰预取，提前促发生成并写入浏览器缓存——
