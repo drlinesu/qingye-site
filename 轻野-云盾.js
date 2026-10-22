@@ -684,33 +684,42 @@
       if (s) { s.lastAt = now(); Store.json('adminSession', s); }
     },
     isLoggedIn: function () { return Admin.sessionState() === 'active'; },
-    // 网站开关
-    isSiteOpen: function () {
-      var s = Store.json('siteStatus');
-      return s ? s.open !== false : true; // 默认开启
+    /* 全网公告：管理端发布后推送到 Supabase config（降级 GitHub 云仓），用户端启动时拉取展示。
+       返回 Promise<{ok,msg}>，供 UI 真实上报同步结果。 */
+    publishAnnouncement: function (title, content, expireHours) {
+      var ann = {
+        id: now() + '-' + Math.random().toString(36).slice(2, 8),
+        title: String(title || '').trim(),
+        content: String(content || '').trim(),
+        createdAt: now(),
+        expiresAt: expireHours ? now() + expireHours * 3600 * 1000 : null
+      };
+      Store.json('announcement', ann);
+      var fallback = function (r) {
+        if (r && r.ok) return r;
+        if (global.QYHub) return global.QYHub.pushConfig({ announcement: ann }).catch(function () { return { ok: false, msg: '云仓推送失败' }; });
+        return r || { ok: false, msg: '未配置后端' };
+      };
+      if (global.QYBridge) return global.QYBridge.pushConfig({ announcement: ann }).then(fallback);
+      if (global.QYHub) return global.QYHub.pushConfig({ announcement: ann });
+      return Promise.resolve({ ok: false, msg: '未配置任何后端' });
     },
-    setSiteOpen: function (open) {
-      var msg = open ? '' : (Store.json('siteStatus') || {}).message || '网站正在维护升级中，暂不可用。';
-      var st = { open: open, updatedAt: now(), message: msg };
-      Store.json('siteStatus', st);
-      /* BaaS 桥接优先推送，降级 GitHub 云仓 */
-      if (global.QYBridge) global.QYBridge.pushConfig({ siteStatus: st }).then(function (r) {
-        if (!r.ok && global.QYHub) global.QYHub.pushConfig({ siteStatus: st }).catch(function () {});
-      });
-      else if (global.QYHub) global.QYHub.pushConfig({ siteStatus: st }).catch(function () {});
+    withdrawAnnouncement: function () {
+      Store.del('announcement');
+      var fallback = function (r) {
+        if (r && r.ok) return r;
+        if (global.QYHub) return global.QYHub.pushConfig({ announcement: null }).catch(function () { return { ok: false, msg: '云仓推送失败' }; });
+        return r || { ok: false, msg: '未配置后端' };
+      };
+      if (global.QYBridge) return global.QYBridge.pushConfig({ announcement: null }).then(fallback);
+      if (global.QYHub) return global.QYHub.pushConfig({ announcement: null });
+      return Promise.resolve({ ok: false, msg: '未配置任何后端' });
     },
-    setCloseMessage: function (msg) {
-      var s = Store.json('siteStatus') || { open: true };
-      s.message = msg;
-      Store.json('siteStatus', s);
-      if (global.QYBridge) global.QYBridge.pushConfig({ siteStatus: s }).then(function (r) {
-        if (!r.ok && global.QYHub) global.QYHub.pushConfig({ siteStatus: s }).catch(function () {});
-      });
-      else if (global.QYHub) global.QYHub.pushConfig({ siteStatus: s }).catch(function () {});
-    },
-    getCloseMessage: function () {
-      var s = Store.json('siteStatus');
-      return s && s.message ? s.message : '网站正在维护升级中，暂不可用，请稍后再试。';
+    getAnnouncement: function () {
+      var a = Store.json('announcement');
+      if (!a) return null;
+      if (a.expiresAt && a.expiresAt < now()) { Store.del('announcement'); return null; }
+      return a;
     },
     // 获取所有用户（经加密数据通道解密读取）
     getUsers: function () {
@@ -732,11 +741,6 @@
         return;
       }
       // 用户端网页：不再提供任何管理端入口（管理端仅靠独立网址进入）
-      // 检查网站状态
-      if (!Admin.isSiteOpen()) {
-        self.renderClosed();
-        return;
-      }
       // 检查已有会话（账号 或 旅者本地会话，任一即放行）
       if (Auth.current()) {
         self.unlock();
@@ -1119,30 +1123,61 @@
         var users = res[0] || {};
         var wafLogs = res[1] || [];
         var userList = Object.keys(users);
-        var siteOpen = Admin.isSiteOpen();
 
         var header = el('div', { class: 'cs-admin-head' }, [
           el('div', { class: 'cs-admin-title' }, ['🛡️ 管理控制台']),
           el('button', { class: 'cs-btn cs-btn-outline cs-btn-sm', onclick: function () { Admin.logout(); self.renderLogin(); } }, ['退出'])
         ]);
 
-      // 网站开关
-      var toggleBtn = el('button', {
-        class: 'cs-btn ' + (siteOpen ? 'cs-btn-danger' : 'cs-btn-primary'),
-        onclick: function () {
-          Admin.setSiteOpen(!Admin.isSiteOpen());
-          self.renderAdminPanel();
-        }
-      }, [siteOpen ? '🔴 关闭网站' : '🟢 开启网站']);
-
-      var msgInput = el('input', { type: 'text', placeholder: '关闭时的提示语', value: Admin.getCloseMessage(), id: 'csCloseMsg' });
-      var saveMsgBtn = el('button', { class: 'cs-btn cs-btn-outline cs-btn-sm', onclick: function () { Admin.setCloseMessage(msgInput.value); alert('提示语已保存'); } }, ['保存提示语']);
-
-      var siteCard = el('div', { class: 'cs-card' }, [
-        el('h3', {}, ['网站状态']),
-        el('p', { class: 'cs-meta' }, ['当前状态：' + (siteOpen ? '🟢 正常开放' : '🔴 已关闭')]),
-        el('div', { class: 'cs-row cs-row-2' }, [toggleBtn, el('span', {})]),
-        el('div', { class: 'cs-row cs-row-2' }, [msgInput, saveMsgBtn])
+      // 全网公告管理（接入 Supabase 后端，发布后用户端启动即拉取展示）
+      var annTitleInput = el('input', { type: 'text', placeholder: '公告标题（如：国庆假期系统维护）', style: 'width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:8px;box-sizing:border-box' });
+      var annContentInput = el('textarea', { placeholder: '公告正文（支持多行，将展示在所有用户端顶部）', rows: 4, style: 'width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:8px;box-sizing:border-box;resize:vertical;font-family:inherit' });
+      var annExpireSel = el('select', { style: 'padding:6px;border:1px solid #e2e8f0;border-radius:8px' }, [
+        el('option', { value: '0' }, ['永不过期']),
+        el('option', { value: '1' }, ['1 小时']),
+        el('option', { value: '6' }, ['6 小时']),
+        el('option', { value: '24' }, ['24 小时']),
+        el('option', { value: '168' }, ['7 天'])
+      ]);
+      var annStatus = el('p', { class: 'cs-meta', style: 'margin:6px 0;color:#64748b' });
+      var curAnn = Admin.getAnnouncement();
+      if (curAnn) {
+        annStatus.innerHTML = '📢 当前生效公告：<b>' + (curAnn.title || '（无标题）') + '</b>' +
+          (curAnn.expiresAt ? ' · 到期 ' + new Date(curAnn.expiresAt).toLocaleString() : ' · 永不过期') +
+          '<br><span style="color:#94a3b8;font-size:11px">' + (curAnn.content || '').replace(/\n/g, '<br>') + '</span>';
+      } else {
+        annStatus.textContent = '暂无生效公告';
+      }
+      var publishBtn = el('button', { class: 'cs-btn cs-btn-primary cs-btn-sm', style: 'margin-right:8px' }, ['📢 发布公告']);
+      var withdrawBtn = el('button', { class: 'cs-btn cs-btn-outline cs-btn-sm' }, ['撤回当前公告']);
+      publishBtn.addEventListener('click', function () {
+        var title = annTitleInput.value.trim();
+        var content = annContentInput.value.trim();
+        if (!title && !content) { annStatus.style.color = '#dc2626'; annStatus.textContent = '请填写标题或正文'; return; }
+        var expireHours = parseInt(annExpireSel.value, 10) || 0;
+        annStatus.style.color = '#64748b'; annStatus.textContent = '正在同步到云端…';
+        Admin.publishAnnouncement(title, content, expireHours).then(function (r) {
+          annStatus.style.color = r.ok ? '#16a34a' : '#dc2626';
+          annStatus.textContent = (r.ok ? '✅ ' : '❌ ') + (r.msg || '同步完成') + (r.ok ? '，用户端下次启动即可看到' : '（请在下方 BaaS 配置卡中设置后端）');
+          if (r.ok) setTimeout(function () { self.renderAdminPanel(); }, 900);
+        });
+      });
+      withdrawBtn.addEventListener('click', function () {
+        annStatus.style.color = '#64748b'; annStatus.textContent = '正在撤回…';
+        Admin.withdrawAnnouncement().then(function (r) {
+          annStatus.style.color = r.ok ? '#16a34a' : '#dc2626';
+          annStatus.textContent = (r.ok ? '✅ ' : '❌ ') + (r.msg || '撤回完成');
+          if (r.ok) setTimeout(function () { self.renderAdminPanel(); }, 900);
+        });
+      });
+      var annCard = el('div', { class: 'cs-card' }, [
+        el('h3', {}, ['📢 全网公告']),
+        el('p', { class: 'cs-meta' }, ['发布后通过 Supabase 同步给全网用户端，用户打开页面即在顶部展示（可设置自动到期）']),
+        el('div', { class: 'cs-row' }, [annTitleInput]),
+        el('div', { class: 'cs-row' }, [annContentInput]),
+        el('div', { class: 'cs-row cs-row-2' }, [el('span', { style: 'color:#64748b;font-size:12px' }, ['有效期']), annExpireSel]),
+        annStatus,
+        el('div', { class: 'cs-row' }, [publishBtn, withdrawBtn])
       ]);
 
       // 用户列表
@@ -1205,7 +1240,7 @@
       var backBtn = el('button', { class: 'cs-btn cs-btn-primary', onclick: function () { self.renderLogin(); } }, ['返回登入']);
 
         self.gateEl.innerHTML = '';
-        var dnCards = [header, siteCard, userCard, wafCard, mfaCard];
+        var dnCards = [header, annCard, userCard, wafCard, mfaCard];
         /* BaaS 桥接配置卡（mfaCard 后） */
         if (window.QYBridge && typeof window.QYBridge.renderAdminCard === 'function') {
           var bridgeCard = el('div', { class: 'cs-card' });
@@ -1359,19 +1394,6 @@
       self._ensureGate();
       self.gateEl.innerHTML = '';
       self.gateEl.appendChild(box);
-    },
-    renderClosed: function () {
-      var self = this;
-      self._ensureGate();
-      self.gateEl.innerHTML = '';
-      self._lockBody(true);
-      var msg = Admin.getCloseMessage();
-      self.gateEl.appendChild(el('div', { class: 'cs-box cs-closed' }, [
-        el('div', { class: 'cs-logo' }, ['🚧']),
-        el('h1', { class: 'cs-title' }, ['网站维护中']),
-        el('p', { class: 'cs-sub' }, [msg]),
-        el('p', { class: 'cs-meta' }, ['请稍后再试，或联系管理员'])
-      ]));
     },
     unlock: function () {
       var self = this;
