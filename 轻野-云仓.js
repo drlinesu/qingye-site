@@ -274,6 +274,9 @@
         if (cfg.siteStatus) {
           global.CloudShield.Store.json('siteStatus', cfg.siteStatus);
         }
+        if (cfg.announcement) {
+          global.CloudShield.Store.json('announcement', cfg.announcement);
+        }
         if (Array.isArray(cfg.donationAmounts)) {
           global.CloudShield.Channel.write('donationAmounts', cfg.donationAmounts).catch(function () {});
         }
