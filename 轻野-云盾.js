@@ -737,11 +737,15 @@
         self.renderClosed();
         return;
       }
-      // 检查已有会话
+      // 检查已有会话（账号 或 旅者本地会话，任一即放行）
       if (Auth.current()) {
         self.unlock();
         return;
       }
+      try {
+        var _trv = localStorage.getItem('qy_traveler');
+        if (_trv) { var _to = JSON.parse(_trv); if (_to && _to.ts) { self.unlock(); return; } }
+      } catch (e) {}
       self.renderLogin();
     },
     // 独立管理端页面初始化：四因子验证 + 会话空闲自动锁定
@@ -819,9 +823,11 @@
       var tabLogin = el('button', { type: 'button', class: 'cs-btn cs-btn-sm', style: 'flex:1' });
       var tabPwd = el('button', { type: 'button', class: 'cs-btn cs-btn-sm', style: 'flex:1' });
       var tabReg = el('button', { type: 'button', class: 'cs-btn cs-btn-sm', style: 'flex:1' });
+      var tabTrv = el('button', { type: 'button', class: 'cs-btn cs-btn-sm', style: 'flex:1' });
       tabWrap.appendChild(tabLogin);
       tabWrap.appendChild(tabPwd);
       tabWrap.appendChild(tabReg);
+      tabWrap.appendChild(tabTrv);
 
       var fields = el('div');
       var msg = el('div', { class: 'cs-msg', id: 'csMsg' });
@@ -851,9 +857,11 @@
         tabLogin.className = 'cs-btn cs-btn-sm cs-btn-primary';
         tabPwd.className = 'cs-btn cs-btn-sm cs-btn-outline';
         tabReg.className = 'cs-btn cs-btn-sm cs-btn-outline';
+        tabTrv.className = 'cs-btn cs-btn-sm cs-btn-outline';
         tabLogin.textContent = '验证码登录';
         tabPwd.textContent = '密码登录';
         tabReg.textContent = '注册新账号';
+        tabTrv.textContent = '旅者登入';
 
         var emailInput = el('input', { type: 'email', placeholder: '请输入邮箱', id: 'csEmail' });
         var codeInput = el('input', { type: 'text', placeholder: '6 位验证码', maxlength: '6', id: 'csCode' });
@@ -907,9 +915,11 @@
         tabLogin.className = 'cs-btn cs-btn-sm cs-btn-outline';
         tabPwd.className = 'cs-btn cs-btn-sm cs-btn-outline';
         tabReg.className = 'cs-btn cs-btn-sm cs-btn-primary';
+        tabTrv.className = 'cs-btn cs-btn-sm cs-btn-outline';
         tabLogin.textContent = '验证码登录';
         tabPwd.textContent = '密码登录';
         tabReg.textContent = '注册新账号';
+        tabTrv.textContent = '旅者登入';
 
         var emailInput = el('input', { type: 'email', placeholder: '邮箱（用于接收验证码）', id: 'csRegEmail' });
         var pwdInput = el('input', { type: 'password', placeholder: '设置密码（8-32 位，建议字母+数字）', id: 'csRegPwd' });
@@ -975,9 +985,11 @@
         tabLogin.className = 'cs-btn cs-btn-sm cs-btn-outline';
         tabPwd.className = 'cs-btn cs-btn-sm cs-btn-primary';
         tabReg.className = 'cs-btn cs-btn-sm cs-btn-outline';
+        tabTrv.className = 'cs-btn cs-btn-sm cs-btn-outline';
         tabLogin.textContent = '验证码登录';
         tabPwd.textContent = '密码登录';
         tabReg.textContent = '注册新账号';
+        tabTrv.textContent = '旅者登入';
 
         var emailInput = el('input', { type: 'email', placeholder: '请输入邮箱', id: 'csPwdEmail' });
         var pwdInput = el('input', { type: 'password', placeholder: '请输入密码', id: 'csPwd' });
@@ -1008,9 +1020,48 @@
         fields.appendChild(tip);
       }
 
+      /* ---------- 旅者登入模式：无需邮箱密码，本机轻量会话 ---------- */
+      function renderTraveler() {
+        mode = 'traveler';
+        msg.textContent = ''; msg.className = 'cs-msg';
+        fields.innerHTML = '';
+        tabLogin.className = 'cs-btn cs-btn-sm cs-btn-outline';
+        tabPwd.className = 'cs-btn cs-btn-sm cs-btn-outline';
+        tabReg.className = 'cs-btn cs-btn-sm cs-btn-outline';
+        tabTrv.className = 'cs-btn cs-btn-sm cs-btn-primary';
+        tabLogin.textContent = '验证码登录';
+        tabPwd.textContent = '密码登录';
+        tabReg.textContent = '注册新账号';
+        tabTrv.textContent = '旅者登入';
+
+        var nickInput = el('input', { type: 'text', placeholder: '昵称（可选，留空自动生成）', maxlength: '20', id: 'csTrvNick' });
+        var joinBtn = el('button', { type: 'button', class: 'cs-btn cs-btn-primary', id: 'csTrvJoinBtn' }, ['🚶 以旅者身份登入']);
+        var tip = el('div', { class: 'cs-msg' }, ['无需邮箱密码 · 仅存本机浏览器 · 登入后解锁出片引擎 / 美食 / 住宿推荐']);
+
+        var submit = function () {
+          var nick = nickInput.value.trim();
+          /* 主页面已加载则走其登入函数（同步内存态+按钮+渲染），否则仅写本机存储 */
+          if (typeof global.__travelerLogin === 'function') {
+            global.__travelerLogin(nick);
+          } else {
+            var n = nick || ('旅人' + Math.floor(Math.random() * 9000 + 1000));
+            try { localStorage.setItem('qy_traveler', JSON.stringify({ nick: n, ts: Date.now() })); } catch (e) {}
+          }
+          self.unlock();
+          try { if (typeof global.render === 'function') global.render(); } catch (e) {}
+        };
+        joinBtn.onclick = submit;
+        nickInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+
+        fields.appendChild(el('div', { class: 'cs-row' }, [nickInput]));
+        fields.appendChild(el('div', { class: 'cs-row' }, [joinBtn]));
+        fields.appendChild(tip);
+      }
+
       tabLogin.onclick = renderLogin;
       tabPwd.onclick = renderPasswordLogin;
       tabReg.onclick = renderRegister;
+      tabTrv.onclick = renderTraveler;
       renderLogin();
     },
     renderAdminForm: function (form) {
