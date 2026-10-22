@@ -336,11 +336,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610222218" defer></script>
-<script src="轻野-桥接.js?v=202610222218" defer></script>
-<script src="轻野-启程.js?v=202610222218" defer></script>
-<script src="轻野-捐赠.js?v=202610222218" defer></script>
-<script src="轻野-云仓.js?v=202610222218" defer></script>
+<script src="轻野-云盾.js?v=202610222312" defer></script>
+<script src="轻野-桥接.js?v=202610222312" defer></script>
+<script src="轻野-启程.js?v=202610222312" defer></script>
+<script src="轻野-捐赠.js?v=202610222312" defer></script>
+<script src="轻野-云仓.js?v=202610222312" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -428,7 +428,6 @@
       </div>
       <div class="frow">
         <div><label class="fl">当地停留天数</label><input type="number" id="stayDays" min="0" max="60" value="0"></div>
-        <div><label class="fl">当地每天打车约(km)</label><input type="number" id="taxiKmDay" min="0" max="300" value="0"></div>
       </div>
       <div class="dist-note" id="distNote">输入城市后自动测算距离</div>
       <div class="frow" id="goTimeRow" style="margin-top:10px">
@@ -483,12 +482,12 @@
         <div style="display:flex;align-items:center;gap:8px;margin-top:8px;padding:8px 10px;background:#ecfeff;border:1px solid #a5f3fc;border-radius:10px;font-size:12.5px">
           <label class="switch"><input type="checkbox" id="tollFree"><span></span></label>
           <span style="font-weight:600;color:#0e7490">节假日高速免费</span>
-          <span style="color:#64748b">（春节/清明/劳动节/国庆 4 个法定假期，自驾和跨城打车高速费按 0 计）</span>
+          <span style="color:#64748b">（春节/清明/劳动节/国庆 4 个法定假期，自驾高速费按 0 计）</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;margin-top:8px;padding:8px 10px;background:#fef3c7;border:1px solid #fde68a;border-radius:10px;font-size:12.5px">
           <label class="switch"><input type="checkbox" id="transOnly"><span></span></label>
           <span style="font-weight:600;color:#92400e">仅交通费用</span>
-          <span style="color:#a16207">（不含住宿、餐饮、当地每日打车——只算从出发地到目的地的往返交通）</span>
+          <span style="color:#a16207">（不含住宿、餐饮——只算从出发地到目的地的往返交通）</span>
         </div>
       </details>
     </div>
@@ -506,7 +505,7 @@
       <div style="margin:0 0 8px"><button type="button" class="btn btn-g btn-sm" id="comboAddStop">＋ 添加中转站（支持多段联运）</button></div>
       <div id="comboModes"></div>
       <div id="aiXferInline" style="margin:0 0 8px;padding:0"></div>
-      <div class="dist-note" id="comboNote">启用后：出发 → 中转 → 目的地 两段组合（如空铁联运、打车接驳），同样享受优惠券抵扣</div>
+      <div class="dist-note" id="comboNote">启用后：出发 → 中转 → 目的地 两段组合（如空铁联运、高铁+大巴接驳），同样享受优惠券抵扣</div>
       <div id="cityCombosBody"></div>
       </div>
     </details>
@@ -528,20 +527,18 @@
             <option value="rail">🚄 高铁</option>
             <option value="flight">✈️ 飞机</option>
             <option value="bus">🚌 大巴</option>
-            <option value="taxi">🚕 打车/网约车</option>
             <option value="drive">🚗 自驾/租车</option>
           </select>
         </div>
         <div><label class="fl">接驳方式：落地 → 目的地</label>
           <select id="nearM2">
-            <option value="taxi">🚕 打车/网约车</option>
             <option value="bus">🚌 大巴</option>
             <option value="rail">🚄 高铁</option>
             <option value="drive">🚗 租车自驾</option>
           </select>
         </div>
       </div>
-      <div class="dist-note" id="nearNote">启用后：先到目的地周边的城镇/县城，再打车/大巴/高铁接驳进城（适合目的地无高铁站、无机场的情况）</div>
+      <div class="dist-note" id="nearNote">启用后：先到目的地周边的城镇/县城，再大巴/高铁/租车接驳进城（适合目的地无高铁站、无机场的情况）</div>
       </div>
     </details>
 
@@ -556,7 +553,6 @@
             <option value="flight">✈️ 飞机</option>
             <option value="rail">🚄 高铁</option>
             <option value="bus">🚌 大巴</option>
-            <option value="taxi">🚕 打车/市内</option>
             <option value="drive">🚗 自驾/租车</option>
           </select>
         </div>
@@ -575,7 +571,7 @@
         </div>
         <div class="full"><button class="btn btn-p" style="width:100%" onclick="addCoupon()">＋ 添加优惠券</button></div>
       </div>
-      <div class="cpn-tip">💡 常见券参考：滴滴券包约 <b>65–130 元/周</b>、5 折神卡；高铁 <b>12306 积分</b>（100 积分抵 1 元）；携程/飞猪立减 <b>20–50 元</b>；云闪付/银行支付立减。详见下方「领券攻略」。</div>
+      <div class="cpn-tip">💡 常见券参考：高铁 <b>12306 积分</b>（100 积分抵 1 元）；携程/飞猪立减 <b>20–50 元</b>；云闪付/银行支付立减。详见下方「领券攻略」。</div>
       <div style="margin-top:12px">
         <div style="font-size:13px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:6px">🔥 路途平台优惠 <span style="font-size:11px;color:var(--muted);font-weight:400">（一键添加到优惠券列表自动计算）</span></div>
         <div id="platOffers"></div>
@@ -688,7 +684,6 @@
       <ul class="tips">
         <li><b>高铁：</b>12306 会员积分（100 积分抵 1 元，可兑换车票）；支付宝/微信/云闪付支付立减；学生票寒暑假各 2 次共 4 次 75 折。</li>
         <li><b>飞机：</b>航司会员日——南航每月 28 日、东航每月 18 日、海航每月 8 日，常有 1–3 折票；携程/飞猪/去哪儿新人立减券与特价日历；错峰早订（提前 30–60 天）。</li>
-        <li><b>打车：</b>滴滴城市/工会券包约 65–130 元每周（如东莞粤工惠、长春文旅券包）；高德/美团/花小猪多平台比价 + 新人券；云闪付「满 20 减 10」等支付立减。</li>
         <li><b>大巴：</b>12308 / 各省客运站公众号购票立减；地方政府文旅消费券可抵扣车票。</li>
       </ul>
       </div>
@@ -708,8 +703,7 @@
           <tr><td>燃油附加费</td><td>800km 内 50 元 / 以上 90 元</td><td>2026-10-10 起国内航线新标准（央视新闻）</td></tr>
           <tr><td>民航发展基金</td><td>50 元/人</td><td>财政部 民航发展基金征收办法（12 岁以下免征）</td></tr>
           <tr><td>大巴运价</td><td>0.27 元/人·km</td><td>江苏省道路客运运价表 0.26–0.35（高一级–高三级）</td></tr>
-          <tr><td>网约车（滴滴快车口径）</td><td>起步 12 元/3km + 2.4 元/km + 0.4 元/分钟 + 超 15km 远途费 0.5 元/km</td><td>滴滴快车各城计价（起步+里程+时长+远途费）；机场 38km 接驳按超 15km 部分加收远途费，车站 12km 不加收；京 13/3km+2.3；沪 14/3km+2.7；深 10/2km+2.7</td></tr>
-          <tr><td>高速过路费</td><td>0.45 元/km（跨城打车/自驾计）</td><td>全国高速公路客车通行费典型水平</td></tr>
+          <tr><td>高速过路费</td><td>0.45 元/km（自驾计）</td><td>全国高速公路客车通行费典型水平</td></tr>
           <tr><td>油价（自驾）</td><td>92# 汽油 7.6 元/L · 油耗 7.5L/100km</td><td>国家发改委成品油调价发布（每 10 个工作日调整，各地挂牌价略有差异，请按当地最新价在设置中更新）</td></tr>
           <tr><td>住宿（旅游城市）</td><td>350 元/晚/间</td><td>携程/美团/去哪儿 经济型+舒适型 中位价，节假日普遍上浮 50–150%</td></tr>
           <tr><td>餐饮</td><td>120 元/人/天</td><td>大众点评/美团 旅游城市正餐人均中位</td></tr>
@@ -737,18 +731,12 @@
       <div><label class="fl">燃油附加 ≤800km(元)</label><input type="number" id="s_fuelLow"></div>
       <div><label class="fl">燃油附加 >800km(元)</label><input type="number" id="s_fuelHigh"></div>
       <div><label class="fl">大巴运价(元/km)</label><input type="number" step="0.01" id="s_busRate"></div>
-      <div><label class="fl">滴滴起步价(元)</label><input type="number" step="0.5" id="s_taxiStart"></div>
-      <div><label class="fl">起步含里程(km)</label><input type="number" step="0.5" id="s_taxiStartKm"></div>
-      <div><label class="fl">滴滴里程费(元/km)</label><input type="number" step="0.1" id="s_taxiPerKm"></div>
       <div><label class="fl">高速费(元/km)</label><div style="display:flex;gap:4px;align-items:center"><input type="number" step="0.05" id="s_highwayFee" style="flex:1"><button type="button" onclick="window.open('https://www.mot.gov.cn/','_blank')" style="padding:4px 8px;font-size:12px;border:1px solid #7c3aed;background:#f5f3ff;color:#7c3aed;border-radius:4px;cursor:pointer;white-space:nowrap" title="打开交通运输部官网查看高速费标准">📋 查交通部</button></div></div>
       <div><label class="fl">油价(元/L·92#参考发改委)</label><div style="display:flex;gap:4px;align-items:center"><input type="number" step="0.1" id="s_fuelPrice" style="flex:1"><button type="button" onclick="updateFuelPrice(null,false)" style="padding:4px 8px;font-size:12px;border:1px solid #22c55e;background:#f0fdf4;color:#16a34a;border-radius:4px;cursor:pointer;white-space:nowrap" title="从官方API拉取最新油价">🔄 更新</button></div><div id="fuelUpdateTs" style="font-size:11px;color:#64748b;margin-top:2px">上次更新：—</div></div>
       <div><label class="fl">油耗(L/100km)</label><input type="number" step="0.1" id="s_fuelCons"></div>
-      <div><label class="fl">滴滴时长费(元/分钟)</label><input type="number" step="0.1" id="s_taxiPerMin"></div>
-      <div><label class="fl">远途费起征(km·滴滴超15km)</label><input type="number" step="1" id="s_taxiFarKm"></div>
-      <div><label class="fl">远途费(元/km·超出部分)</label><input type="number" step="0.1" id="s_taxiFarFee"></div>
       <div><label class="fl">租车(元/天·0=自有车)</label><input type="number" id="s_rentDay"></div>
-      <div><label class="fl">机场↔市区打车(km)</label><input type="number" id="s_airportCityKm"></div>
-      <div><label class="fl">车站↔市区打车(km)</label><input type="number" id="s_stationCityKm"></div>
+      <div><label class="fl">机场↔市区距离(km)</label><input type="number" id="s_airportCityKm"></div>
+      <div><label class="fl">车站↔市区距离(km)</label><input type="number" id="s_stationCityKm"></div>
       <div><label class="fl">公路绕行系数</label><input type="number" step="0.05" id="s_circRoad"></div>
       <div><label class="fl">住宿(元/晚/间)</label><input type="number" id="s_hotel"></div>
       <div><label class="fl">餐饮(元/人/天)</label><input type="number" id="s_meal"></div>
@@ -795,7 +783,7 @@
 </div>
 
 <footer class="foot">
-  费用为算法估算（依据 12306 / 航司 / 各地发改委定价文件与成品油调价 / 携程、飞猪、美团、滴滴等平台公开行情），仅供参考，实际以购票平台为准。
+  费用为算法估算（依据 12306 / 航司 / 各地发改委定价文件与成品油调价 / 携程、飞猪、美团等平台公开行情），仅供参考，实际以购票平台为准。
   <span id="fuelFooterTip" style="color:#16a34a">🟢 油价已接入官方实时数据源，每日自动更新。</span>
   <div style="margin-top:8px">📺 创作者 <a href="https://space.bilibili.com/" target="_blank" style="color:#00a1d6;text-decoration:none">B站 @余光</a> · 轻装 · 长走 · 慢看</div>
 </footer>
@@ -920,7 +908,7 @@ function autoInferOldCities(){
 const DEFAULTS={
   rail2:0.46, railDisc:0.95, railFirstMul:1.65, railBizMul:3.3,
   flightDisc:0.55, airportFee:50, fuelLow:50, fuelHigh:90,
-  busRate:0.27, taxiStart:12, taxiStartKm:3, taxiPerKm:2.4, taxiPerMin:0.4, taxiFarKm:15, taxiFarFee:0.5, highwayFee:0.45,
+  busRate:0.27, highwayFee:0.45,
   airportCityKm:38, stationCityKm:12, circRoad:1.2,
   fuelPrice:7.6, fuelCons:7.5, rentDay:150,
   hotel:350, meal:120, amapKey:"", amapSec:""
@@ -997,9 +985,9 @@ async function updateFuelPrice(province,silent){
 let state=loadState();
 function loadState(){
   const defCombo={enabled:false,city:"",m1:"rail",m2:"flight",cities:[],modes:[]};
-  const defNear={enabled:false,city:"",m1:"rail",m2:"taxi"};
-  try{ const s=JSON.parse(localStorage.getItem(LS)); if(s&&s.rates){ s.rates={...DEFAULTS,...s.rates}; if(!s.combo)s.combo={...defCombo}; if(!s.near)s.near={...defNear}; if(!s.form.tollFree)s.form.tollFree=false; if(!s.form.transOnly)s.form.transOnly=false; if(!("studentTicket" in s.form))s.form.studentTicket=false; if(typeof s.scenicCity!=="string")s.scenicCity=""; if(!s.form.goSeg)s.form.goSeg="mid"; if(!s.form.backSeg)s.form.backSeg="mid"; if(!("goDate"in s.form))s.form.goDate=""; if(!("backDate"in s.form))s.form.backDate=""; if(!s._actualFare)s._actualFare={}; return s; } }catch(e){}
-  return {rates:{...DEFAULTS},coupons:[],combo:{...defCombo},near:{...defNear},scenicCity:"",form:{from:"北京",to:"上海",people:1,stayDays:0,taxiKmDay:0,tripType:"round",railClass:"2",railType:"G",studentTicket:false,distOverride:"",tollFree:false,transOnly:false,goDate:"",goSeg:"mid",backDate:"",backSeg:"mid"},_actualFare:{}};
+  const defNear={enabled:false,city:"",m1:"rail",m2:"bus"};
+  try{ const s=JSON.parse(localStorage.getItem(LS)); if(s&&s.rates){ s.rates={...DEFAULTS,...s.rates}; if(!s.combo)s.combo={...defCombo}; if(!s.near)s.near={...defNear}; if(!s.form.tollFree)s.form.tollFree=false; if(!s.form.transOnly)s.form.transOnly=false; if(!("studentTicket" in s.form))s.form.studentTicket=false; if(typeof s.scenicCity!=="string")s.scenicCity=""; if(!s.form.goSeg)s.form.goSeg="mid"; if(!s.form.backSeg)s.form.backSeg="mid"; if(!("goDate"in s.form))s.form.goDate=""; if(!("backDate"in s.form))s.form.backDate=""; if(!s._actualFare)s._actualFare={}; /* 打车功能已移除：旧数据中的打车段迁移为 bus */ if(s.near&&s.near.m2==="taxi")s.near.m2="bus"; if(s.near&&s.near.m1==="taxi")s.near.m1="bus"; if(s.combo){ if(s.combo.m1==="taxi")s.combo.m1="rail"; if(s.combo.m2==="taxi")s.combo.m2="flight"; if(Array.isArray(s.combo.modes))s.combo.modes=s.combo.modes.map(m=>m==="taxi"?"bus":m); } return s; } }catch(e){}
+  return {rates:{...DEFAULTS},coupons:[],combo:{...defCombo},near:{...defNear},scenicCity:"",form:{from:"北京",to:"上海",people:1,stayDays:0,tripType:"round",railClass:"2",railType:"G",studentTicket:false,distOverride:"",tollFree:false,transOnly:false,goDate:"",goSeg:"mid",backDate:"",backSeg:"mid"},_actualFare:{}};
 }
 function save(){ try{localStorage.setItem(LS,JSON.stringify(state));}catch(e){} }
 
@@ -1071,13 +1059,8 @@ function flightParts(km,R){
   const tax=state.rates.airportFee+(km<=800?state.rates.fuelLow:state.rates.fuelHigh);
   return {full,bare,tax};
 }
-/* 滴滴分城市档位（结合滴滴各城市快车定价差异）：北上广深定价上浮约18%，有机场城市按基准价，其他小城下调约15% */
-const TAXI_TIER1=new Set(["北京","上海","广州","深圳"]);
-function taxiTier(city){if(!city)return 1;return TAXI_TIER1.has(city)?1.18:(AIRPORT_CITIES.has(city)?1:0.85);}
-function taxiTierName(city){const t=taxiTier(city);return t>1?"一线城市价":t<1?"小城价":"标准价";}
-function taxiNightMult(){return state.form.goSeg==="night"?1.2:1;} // 夜间时段（23:00-05:00）滴滴加收夜间服务费约20%
-function cityTaxiFare(km,city){const r=state.rates,t=taxiTier(city);return (r.taxiStart*t+Math.max(0,km-r.taxiStartKm)*r.taxiPerKm*t+Math.max(0,km-(r.taxiFarKm||15))*(r.taxiFarFee||0)*t+cityRideTime(km)*(r.taxiPerMin||0)*t)*taxiNightMult();} // 滴滴快车口径：起步+里程+时长+超15km远途费，按城市档位与夜间时段调整
-function interTaxiFare(km,city){const r=state.rates,t=taxiTier(city);const hwy=state.form.tollFree?0:(km>=30?km*r.highwayFee:0);return (r.taxiStart*t+Math.max(0,km-r.taxiStartKm)*r.taxiPerKm*t+km/85*60*(r.taxiPerMin||0)*t+hwy)*taxiNightMult();} // 跨城按高速均速计时长费（高速费为政府定价，不随档位浮动）
+/* 打车（滴滴）费用计算已按需求移除：跨城打车方案与市内打车/接驳打车费用均不再计入。
+   仅保留 cityRideTime 用于「门到门」时间参考（非费用）。 */
 function cityRideTime(km){return km/30*60+8;}
 function driveFare(km){const r=state.rates;const hwy=state.form.tollFree?0:km*r.highwayFee;return km/100*(r.fuelCons||7.5)*(r.fuelPrice||7.6)+hwy;} // 油费（油价参考发改委92#）+高速过路费
 function legHours(mode,km,R){
@@ -1090,7 +1073,7 @@ function legHours(mode,km,R){
   else hMin=km/75*60+15;
   return Math.round(hMin/60*10)/10; // 返回小时，保留1位小数
 }
-/* 优惠券引擎：transport 券作用于票面，taxi 券作用于市内打车 */
+/* 优惠券引擎：transport 券作用于对应交通票面（打车券体系已随打车费用一并移除，历史打车券不再参与计算） */
 function pickCoupons(mode){
   const list=state.coupons.filter(c=>c.mode===mode||c.mode==="any");
   const pct=list.filter(c=>c.type==="percent").sort((a,b)=>b.value-a.value)[0];
@@ -1118,7 +1101,7 @@ function applyAmt(c,remaining,units){
 const AIRPORT_CITIES=new Set(["北京","上海","广州","深圳","天津","重庆","成都","杭州","武汉","西安","南京","郑州","长沙","沈阳","大连","哈尔滨","长春","昆明","贵阳","南宁","石家庄","太原","呼和浩特","兰州","西宁","银川","乌鲁木齐","拉萨","济南","青岛","合肥","南昌","福州","厦门","海口","三亚","宁波","温州","无锡","常州","南通","徐州","扬州","金华","台州","衢州","舟山","泉州","南平","龙岩","珠海","佛山","惠州","汕头","潮州","揭阳","梅州","韶关","湛江","洛阳","安阳","信阳","南阳","襄阳","宜昌","十堰","恩施","衡阳","岳阳","常德","张家界","遵义","安顺","六盘水","凯里","铜仁","桂林","柳州","北海","梧州","玉林","百色","丽江","大理","西双版纳","香格里拉","保山","普洱","昭通","绵阳","宜宾","南充","达州","九寨沟","稻城","西昌","攀枝花","九江","赣州","上饶","景德镇","吉安","阜阳","芜湖","安庆","黄山","淮安","盐城","连云港","泰州","唐山","秦皇岛","邯郸","张家口","承德","大同","临汾","长治","包头","鄂尔多斯","赤峰","通辽","呼伦贝尔","满洲里","延安","汉中","榆林","咸阳","安康","天水","敦煌","嘉峪关","张掖","格尔木","日喀则","林芝","喀什","伊宁","库尔勒","哈密","阿克苏","延吉","通化","松原","白城","大庆","齐齐哈尔","牡丹江","佳木斯","黑河","漠河","丹东","锦州","营口","鞍山","朝阳","烟台","威海","潍坊","临沂","济宁","菏泽","日照","东营", // 以下为 CITY_GEO 补充城市中有民用机场者
   "吕梁","乌兰察布","巴彦淖尔","兴安盟","锡林郭勒","阿拉善盟","白山","鸡西","伊春","宣城","怀化","邵阳","巴中","黔东南","临沧","那曲","昌都","山南","阿里","酒泉","庆阳","海东","海西","固原","和田","克拉玛依","吐鲁番","香港","澳门","台北","高雄","台中","台南"]);
 const NO_RAIL_CITIES=new Set(["稻城","阿拉善盟","五指山","澳门","台北","高雄","台中","台南","新竹","基隆","昌都","阿里"]); // 无铁路客运站/不在联网铁路，不能作为高铁段端点
-function citySupports(c,mode){ // 飞机查民用机场白名单，高铁查无铁路黑名单；大巴/打车/自驾各城均支持
+function citySupports(c,mode){ // 飞机查民用机场白名单，高铁查无铁路黑名单；大巴/自驾各城均支持
   if(!c)return false;
   if(mode==="flight")return AIRPORT_CITIES.has(c[0]);
   if(mode==="rail")return !NO_RAIL_CITIES.has(c[0]);
@@ -1131,7 +1114,7 @@ function comboFeasWarns(A,C,B,m1,m2){ // 手动方案的可行性复核提示（
   const nm=c=>c?c[0]:"该城市",lbl=md=>md==="flight"?"民用机场":md==="rail"?"高铁站":null;
   const w=[];
   [[m1,A,C,"段1"],[m2,C,B,"段2"]].forEach(sd=>{
-    const md=sd[0],L=lbl(md);if(!L)return; // 大巴/打车/自驾各城均支持，无需复核
+    const md=sd[0],L=lbl(md);if(!L)return; // 大巴/自驾各城均支持，无需复核
     const bad=[];
     if(!citySupports(sd[1],md))bad.push(nm(sd[1]));
     if(!citySupports(sd[2],md))bad.push(nm(sd[2]));
@@ -1170,11 +1153,8 @@ function compute(){
   const p=+state.form.people||1, stay=+state.form.stayDays||0, legs=state.form.tripType==="round"?2:1;
   const cars=Math.ceil(p/3);
 
-  // 行程期间市内打车（各方式相同）
-  // 当地每日打车（仅交通模式下关闭）
-  const kmDay=+state.form.taxiKmDay||0;
-  const ridesDay=Math.max(1,Math.round(kmDay/10));
-  const onTripTaxi=stay>0&&kmDay>0&&!state.form.transOnly?stay*ridesDay*cars*cityTaxiFare(kmDay/ridesDay,B&&B[0]):0;
+  // 行程期间市内打车费用已移除（不记入计算）
+  const onTripTaxi=0;
   // 住宿餐饮（仅交通模式下关闭）
   const rooms=Math.ceil(p/2);
   const stayCost=Math.round((stay>0&&!state.form.transOnly?state.rates.hotel*rooms*stay+state.rates.meal*p*stay:0)*(B?weatherFactor(B).f:1)); // 天气窗口季节性校准（间接校准住宿餐饮）
@@ -1188,14 +1168,13 @@ function compute(){
     const stu=!!state.form.studentTicket&&(state.form.railClass==="2"||state.form.railClass==="ns");
     if(stu)fare*=0.75;
     const ticket=fare*p*legs;
-    const cityN=legs*cars*(cityTaxiFare(R.stationCityKm,A&&A[0])+cityTaxiFare(R.stationCityKm,B&&B[0]));
+    const cityN=0; // 打车接驳费用已移除，不计入
     const taxPool=ticket;
-    const cp=pickCoupons("rail"), tpc=pickCoupons("taxi");
+    const cp=pickCoupons("rail");
     const s1=applyPct(cp.pct,taxPool), s2=applyAmt(cp.amt,taxPool-s1.save,p);
-    const s3=applyPct(tpc.pct,cityN+onTripTaxi), s4=applyAmt(tpc.amt,cityN+onTripTaxi-s3.save,cars);
     const h=legHours("rail",rail,R);
     modes.push({key:"rail",name:"高铁"+(state.form.railType==="D"?"/动车":""),icon:"🚄",color:"#0f766e",soft:"var(--teal-soft)",
-      ticket,taxes:0,city:cityN,onTaxi:onTripTaxi,stay:stayCost,saves:[s1,s2,s3,s4],
+      ticket,taxes:0,city:cityN,onTaxi:onTripTaxi,stay:stayCost,saves:[s1,s2],
       h,days:Math.max(1,Math.ceil(h/16))*legs,note:kmLabel(rail)+" · "+state.form.railType+"字头"+clsName(state.form.railClass)+(stu?" · 🎓学生票75折":""),
       warns:[]});
   }
@@ -1204,14 +1183,13 @@ function compute(){
   if(great>0&&segViable("flight",A,B,air)){
     const fp=flightParts(air,R);
     const ticket=fp.bare*p*legs, taxes=fp.tax*p*legs;
-    const cityN=legs*cars*(cityTaxiFare(R.airportCityKm,A&&A[0])+cityTaxiFare(R.airportCityKm,B&&B[0]));
-    const cp=pickCoupons("flight"), tpc=pickCoupons("taxi");
+    const cityN=0; // 打车接驳费用已移除，不计入
+    const cp=pickCoupons("flight");
     const s1=applyPct(cp.pct,ticket), s2=applyAmt(cp.amt,ticket-s1.save,p);
-    const s3=applyPct(tpc.pct,cityN+onTripTaxi), s4=applyAmt(tpc.amt,cityN+onTripTaxi-s3.save,cars);
     const h=legHours("flight",air,R);
     const warns=[]; if(air<350) warns.push("短途航班班次少，可能无直飞，实际多改乘高铁");
     modes.push({key:"flight",name:"飞机",icon:"✈️",color:"#2563eb",soft:"var(--blue-soft)",
-      ticket,taxes,city:cityN,onTaxi:onTripTaxi,stay:stayCost,saves:[s1,s2,s3,s4],
+      ticket,taxes,city:cityN,onTaxi:onTripTaxi,stay:stayCost,saves:[s1,s2],
       h,days:Math.max(1,Math.ceil(h/16))*legs,note:kmLabel(air)+" · 约"+Math.round(state.rates.flightDisc*10)+"折票价",
       warns});
   }
@@ -1220,30 +1198,16 @@ function compute(){
   if(great>0&&segViable("bus",A,B,road)){
     const fare=Math.max(10,road*state.rates.busRate)+2;
     const ticket=fare*p*legs;
-    const cityN=legs*cars*(cityTaxiFare(R.stationCityKm,A&&A[0])+cityTaxiFare(R.stationCityKm,B&&B[0]));
-    const cp=pickCoupons("bus"), tpc=pickCoupons("taxi");
+    const cityN=0; // 打车接驳费用已移除，不计入
+    const cp=pickCoupons("bus");
     const s1=applyPct(cp.pct,ticket), s2=applyAmt(cp.amt,ticket-s1.save,p);
-    const s3=applyPct(tpc.pct,cityN+onTripTaxi), s4=applyAmt(tpc.amt,cityN+onTripTaxi-s3.save,cars);
     const h=legHours("bus",road,R);
     modes.push({key:"bus",name:"长途大巴",icon:"🚌",color:"#d97706",soft:"var(--amber-soft)",
-      ticket,taxes:0,city:cityN,onTaxi:onTripTaxi,stay:stayCost,saves:[s1,s2,s3,s4],
+      ticket,taxes:0,city:cityN,onTaxi:onTripTaxi,stay:stayCost,saves:[s1,s2],
       h,days:Math.max(1,Math.ceil(h/16))*legs,note:kmLabel(road)+" · 高一级客车运价",warns:[]});
   }
   else if(great>0)feasNotes.push(`🚌 大巴：超过 600km 无常规长途班车，已隐藏大巴方案（建议高铁/飞机）`);
-  // ---- 出租车/网约车（跨城门到门）----
-  if(great>0){
-    const fare=interTaxiFare(road,A&&A[0]);
-    const ticket=fare*cars*legs;
-    const tpc=pickCoupons("taxi");
-    const pool=ticket+onTripTaxi;
-    const s1=applyPct(tpc.pct,pool), s2=applyAmt(tpc.amt,pool-s1.save,cars);
-    const h=legHours("taxi",road,R);
-    const warns=[]; if(road>300) warns.push("跨城打车超过 300km 费用偏高，建议高铁+市内打车组合");
-    const sToll=state.form.tollFree?{save:(road>=30?road*R.highwayFee*cars*legs:0),label:"节假日高速免费（省）"}:{save:0,label:null};
-    modes.push({key:"taxi",name:"出租车/网约车",icon:"🚕",color:"#e11d48",soft:"var(--rose-soft)",
-      ticket,taxes:0,city:0,onTaxi:onTripTaxi,stay:stayCost,saves:[s1,s2,sToll].filter(s=>s.save>0||s.label),
-      h,days:Math.max(1,Math.ceil(h/16))*legs,note:kmLabel(road)+" · "+(state.form.tollFree?"高速免费":"含高速费")+" · "+cars+"辆车"+" · 滴滴"+taxiTierName(A&&A[0])+(state.form.goSeg==="night"?"+夜间20%":""),warns});
-  }
+  // ---- 出租车/网约车方案已移除：打车费用不再计入比较（其余方式不含打车接驳费） ----
   // ---- 自驾（油费+高速费；油价参考国家发改委 92# 汽油）----
   if(great>0){
     const ticket=driveFare(road)*cars*legs;
@@ -1263,11 +1227,11 @@ function compute(){
     m.per=m.total/p;
   });
   // ===== 计算复核（独立路径交叉验算，偏差超阈值时 console.warn 但不影响主流程） =====
-  try{verifyCompute({modes,p,rail,road,air},R,cityTaxiFare,interTaxiFare,legHours);}catch(_){}
+  try{verifyCompute({modes,p,rail,road,air},R,legHours);}catch(_){}
   return {modes,great,rail,road,air,p,stay,legs,cars,onTaxi:onTripTaxi,stayCost,feasNotes};
 }
 /* compute() 独立复核：各方式 total/per/hours 用独立路径重算，偏差超 0.5% 时 warn */
-function verifyCompute(res,R,ctFare,interFare,lh){
+function verifyCompute(res,R,lh){
   const W=0.005; // 0.5% 阈值（浮点误差上限）
   res.modes.forEach(m=>{
     const rebuild=m.ticket+m.taxes+m.city+m.onTaxi+m.stay-m.save;
@@ -1281,8 +1245,7 @@ function verifyCompute(res,R,ctFare,interFare,lh){
     rail:km=>Math.round(km/235*10)/10,
     flight:km=>Math.round((km/750+25/60)*10)/10,
     bus:km=>Math.round((km/78+km/300*15/60)*10)/10,
-    drive:km=>Math.round((km/85+km/300*15/60+10/60)*10)/10,
-    taxi:km=>Math.round((km/75+15/60)*10)/10
+    drive:km=>Math.round((km/85+km/300*15/60+10/60)*10)/10
   }[m.key];
   if(lhIndep){const reh=lhIndep(m.km);if(Math.abs(reh-m.h)/Math.max(.01,reh)>W)console.warn(`[轻野复核] ${m.key} hours 偏差：独立式${reh.toFixed(2)} vs ${m.h.toFixed(2)}`);}
   });
@@ -1580,7 +1543,7 @@ function renderExpenseBar(A,B){
   const cached=expCacheGet(k);
   const formHtml=_expOpen?`
     <div style="margin-top:6px;padding:8px 10px;background:#fff;border:1px solid var(--line);border-radius:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
-      <select id="expMode" style="font-size:12px;padding:3px 6px">${["rail","flight","bus","taxi","drive","combo"].map(m=>`<option value="${m}">${{rail:"🚄 高铁",flight:"✈️ 飞机",bus:"🚌 大巴",taxi:"🚕 打车",drive:"🚗 自驾",combo:"🔗 联运"}[m]}</option>`).join("")}</select>
+      <select id="expMode" style="font-size:12px;padding:3px 6px">${["rail","flight","bus","drive","combo"].map(m=>`<option value="${m}">${{rail:"🚄 高铁",flight:"✈️ 飞机",bus:"🚌 大巴",drive:"🚗 自驾",combo:"🔗 联运"}[m]}</option>`).join("")}</select>
       <input id="expCost" type="number" min="1" placeholder="实际总花费 ¥" style="width:110px;font-size:12px;padding:3px 6px">
       <input id="expPeople" type="number" min="1" max="20" placeholder="人数" value="${state.form.people||1}" style="width:60px;font-size:12px;padding:3px 6px">
       <input id="expDate" type="date" value="${state.form.goDate||wxToday()}" style="font-size:12px;padding:3px 6px">
@@ -1703,19 +1666,18 @@ function segFare(mode,km,p,cars,fromCity){
   if(mode==="flight"){const fp=flightParts(km);return {fare:fp.bare*p,tax:fp.tax*p};}
   if(mode==="bus") return {fare:(Math.max(10,km*state.rates.busRate)+2)*p,tax:0};
   if(mode==="drive") return {fare:driveFare(km)*cars,tax:0};
-  return {fare:interTaxiFare(km,fromCity)*cars,tax:0};
+  return {fare:0,tax:0}; // 打车段费用已移除（不再计入）
 }
 function evalCombo(A,C,B,m1,m2,res){
   const p=res.p,legs=res.legs,cars=res.cars;
   const k1=segKm(A,C,m1),k2=segKm(C,B,m2);
   const f1=segFare(m1,k1,p,cars,A&&A[0]),f2=segFare(m2,k2,p,cars,C&&C[0]);
-  const farePool={rail:0,flight:0,bus:0,taxi:0,drive:0};
+  const farePool={rail:0,flight:0,bus:0,drive:0};
   farePool[m1]+=f1.fare;farePool[m2]+=f2.fare;
   const taxes=f1.tax+f2.tax;
-  const ride1=(m1==="taxi"||m1==="drive")?0:cars*cityTaxiFare(m1==="flight"?state.rates.airportCityKm:state.rates.stationCityKm,A&&A[0]);
-  const ride2=(m2==="taxi"||m2==="drive")?0:cars*cityTaxiFare(m2==="flight"?state.rates.airportCityKm:state.rates.stationCityKm,B&&B[0]);
-  const city=(ride1+ride2)*legs;
-  // 优惠券：高铁/飞机/大巴券作用于对应段票面；打车券作用于打车段+市内接驳+当地打车
+  // 市内接驳打车费用已移除（不记入计算）
+  const city=0;
+  // 优惠券：高铁/飞机/大巴券作用于对应段票面（打车券体系已随打车费用一并移除）
   const used=[];let saveTotal=0;
   ["rail","flight","bus","drive"].forEach(md=>{
     if(farePool[md]<=0)return;
@@ -1724,11 +1686,6 @@ function evalCombo(A,C,B,m1,m2,res){
     const s2=applyAmt(cp.amt,farePool[md]-s1.save,p);
     [s1,s2].forEach(s=>{if(s.save>0){saveTotal+=s.save;used.push(s);}});
   });
-  const taxiPool=farePool.taxi+city+res.onTaxi;
-  const tpc=pickCoupons("taxi");
-  const t1=applyPct(tpc.pct,taxiPool);
-  const t2=applyAmt(tpc.amt,taxiPool-t1.save,cars);
-  [t1,t2].forEach(s=>{if(s.save>0){saveTotal+=s.save;used.push(s);}});
   const xfer=(m1==="drive"&&m2==="drive")?15:40; // 两段均自驾视为连续驾驶，仅中途休息（单位：分钟）
   const h1=legHours(m1,k1),h2=legHours(m2,k2);
   const h=h1+h2+xfer/60; // xfer 为分钟，需换算为小时
@@ -1736,8 +1693,6 @@ function evalCombo(A,C,B,m1,m2,res){
   const detour=direct>0?(k1+k2)/direct:1;
   const warns=[];
   if(detour>1.6)warns.push(`经${C[0]}绕行明显（约为直达里程的 ${Math.round(detour*100)}%），请确认是否顺路`);
-  if(k1>300&&m1==="taxi")warns.push("第一段打车超 300km，费用偏高，建议改高铁");
-  if(k2>300&&m2==="taxi")warns.push("第二段打车超 300km，费用偏高，建议改高铁");
   if(m1==="flight"&&k1<350)warns.push("第一段航程过短，班次可能很少");
   if(m2==="flight"&&k2<350)warns.push("第二段航程过短，班次可能很少");
   if(k1>600&&m1==="drive")warns.push("第一段自驾超 600km，长途疲劳，建议高铁/飞机替代");
@@ -1754,8 +1709,6 @@ function comboToMode(r,res){
   ];
   if(r.taxes)detRows.push(["机建+燃油附加",r.taxes]);
   if(r.rent)detRows.push(["租车费（落地自驾，按天）",r.rent]);
-  detRows.push(["市内接驳打车（机场/车站·滴滴快车）",r.city]);
-  if(res.onTaxi)detRows.push([`当地市内打车（${res.stay}天）`,res.onTaxi]);
   if(res.stayCost)detRows.push(["住宿+餐饮（可关）",res.stayCost]);
   r.used.forEach(u=>detRows.push(["🎫 已抵扣："+u.label,-u.save]));
   return {key:"combo",name:`${SHORT[r.m1]}+${SHORT[r.m2]}`,icon:"🔗",color:"#7c3aed",soft:"var(--violet-soft)",
@@ -1792,7 +1745,6 @@ function segHitNo(md,fN,tN){const tbl=md==="rail"?TRAIN_SCHEDULES:md==="flight"?
 function segViable(md,fC,tC,km){ // 段级可行硬校验：城市设施 + 合理距离区间 + 现实班次存在性（参考去哪儿可订口径）
   if(!citySupports(fC,md)||!citySupports(tC,md))return false;
   const fN=fC[0],tN=tC[0];
-  if(md==="taxi")return km<=300;   // 跨城打车超 300km 费用/疲劳均不合理（与既有警示口径一致）
   if(md==="bus")return km<=600;    // 长途班车常规运营上限
   if(md==="drive")return km<=600;  // 单段自驾超 600km 疲劳驾驶风险
   if(md==="flight"){
@@ -1820,10 +1772,9 @@ function recommendCombos(A,B,res){ // 全网算法：城市图 2 段搜索 → �
     for(const C of trans){
       // 几何预剪枝：该城任意方式组合的绕行下界 = (dAC+dCB)×minFac/直达里程，超阈值则整城跳过（数学上不可能通过，纯提速不改结果）
       if(directRoad>0&&(hav(A,C)+hav(C,B))*minFac/directRoad>detourCap)continue;
-      for(const m1 of ["rail","flight","bus","taxi"]){
+      for(const m1 of ["rail","flight","bus"]){
         if(!segViable(m1,A,C,segKm(A,C,m1)))continue; // 段1：设施+距离硬校验
-        for(const m2 of ["rail","flight","bus","taxi"]){
-          if(m1==="taxi"&&m2==="taxi")continue; // 打车换打车无意义；同方式换乘（如高铁换高铁）是现实常见中转，允许
+        for(const m2 of ["rail","flight","bus"]){
           if(!segViable(m2,C,B,segKm(C,B,m2)))continue; // 段2：设施+距离硬校验
           if(!comboFeasible(A,C,B,m1,m2))continue;      // 起讫点交通条件复核（无机场/高铁站不走该方式）
           const r=evalCombo(A,C,B,m1,m2,res);
@@ -1861,7 +1812,7 @@ function recommendCombos(A,B,res){ // 全网算法：城市图 2 段搜索 → �
 }
 /* ================= 组合联运 · 多中转站链式配置 =================
    cities/modes 为权威数据；city/m1/m2 自动同步为兼容镜像（旧逻辑全部继续有效） */
-const COMBO_MODE_OPTS=[["rail","🚄 高铁"],["flight","✈️ 飞机"],["bus","🚌 大巴"],["taxi","🚕 打车/网约车"],["drive","🚗 自驾/租车"]];
+const COMBO_MODE_OPTS=[["rail","🚄 高铁"],["flight","✈️ 飞机"],["bus","🚌 大巴"],["drive","🚗 自驾/租车"]];
 function comboChainGet(){ // 读取当前链：cities=中转城市名数组（含空行），modes=每段方式（长度=城市数+1；默认高铁，末段默认飞机）
   const cb=state.combo||{};
   // 统一强制为字符串：历史污染（旧版本曾把接驳费数值写进 city/cities）在读取时自愈，避免下游 .trim 崩溃
@@ -1975,8 +1926,8 @@ function evalMultiCombo(A,cities,modes,res){
   // cities=[C1,C2,...] 中转城市，modes=[m1,m2,...,mN] 每段方式；路径 A→C1→...→B
   const p=res.p,legs=res.legs,cars=res.cars,n=modes.length;
   const segs=[];
-  let totalFare=0,taxes=0,cityRide=0,totalH=0,totalKm=0;
-  const farePool={rail:0,flight:0,bus:0,taxi:0,drive:0};
+  let totalFare=0,taxes=0,totalH=0,totalKm=0;
+  const farePool={rail:0,flight:0,bus:0,drive:0};
   const warns=[];
   for(let i=0;i<n;i++){
     const from=i===0?A:cities[i-1];
@@ -1990,7 +1941,6 @@ function evalMultiCombo(A,cities,modes,res){
     totalH+=h;
     segs.push({from:from[0],to:to[0],md,km,fare:f.fare,h});
     // 段级警告（与 evalCombo 同口径）
-    if(km>300&&md==="taxi")warns.push(`第${i+1}段打车超 300km，费用偏高，建议改高铁`);
     if(md==="flight"&&km<350)warns.push(`第${i+1}段航程过短，班次可能很少`);
     if(km>600&&md==="drive")warns.push(`第${i+1}段自驾超 600km，长途疲劳，建议公共交通`);
   }
@@ -1998,11 +1948,8 @@ function evalMultiCombo(A,cities,modes,res){
   for(let i=0;i<n-1;i++){
     totalH += (modes[i]==="drive"&&modes[i+1]==="drive")?15/60:40/60;
   }
-  // 市内接驳：起点 + 终点（非自驾/打车段才需要机场/车站接驳）
-  if(modes[0]!=="taxi"&&modes[0]!=="drive")cityRide+=cars*cityTaxiFare(modes[0]==="flight"?state.rates.airportCityKm:state.rates.stationCityKm,A&&A[0]);
-  if(modes[n-1]!=="taxi"&&modes[n-1]!=="drive")cityRide+=cars*cityTaxiFare(modes[n-1]==="flight"?state.rates.airportCityKm:state.rates.stationCityKm,B&&B[0]);
-  cityRide*=legs;
-  // 优惠券：按各方式票面分别套用（与 evalCombo 同口径）
+  // 市内接驳打车费用已移除（不记入计算）
+  // 优惠券：按各方式票面分别套用（与 evalCombo 同口径；打车券体系已随打车费用一并移除）
   let saveTotal=0;const used=[];
   ["rail","flight","bus","drive"].forEach(md=>{
     if(farePool[md]<=0)return;
@@ -2011,27 +1958,20 @@ function evalMultiCombo(A,cities,modes,res){
     const s2=applyAmt(cp.amt,farePool[md]-s1.save,p);
     [s1,s2].forEach(s=>{if(s.save>0){saveTotal+=s.save;used.push(s);}});
   });
-  const taxiPool=farePool.taxi+cityRide+res.onTaxi;
-  const tpc=pickCoupons("taxi");
-  const t1=applyPct(tpc.pct,taxiPool);
-  const t2=applyAmt(tpc.amt,taxiPool-t1.save,cars);
-  [t1,t2].forEach(s=>{if(s.save>0){saveTotal+=s.save;used.push(s);}});
   // 租车费：任意段为自驾则算落地租车（按停留天数）
   const hasDrive=modes.some(m=>m==="drive");
   const rent=hasDrive?state.rates.rentDay*(res.stay||1):0;
   const direct=res.great*state.rates.circRoad;
   const detour=direct>0?totalKm/direct:1;
   if(detour>1.6)warns.push(`总绕行明显（约为直达里程的 ${Math.round(detour*100)}%）`);
-  const total=totalFare+taxes+cityRide+rent+res.onTaxi+res.stayCost-saveTotal;
-  return {cities,modes,segs,totalFare,taxes,city:cityRide,rent,total,per:total/p,h:totalH,days:Math.max(1,Math.ceil(totalH/16))*legs,saveTotal,used,warns,detour,segCount:n};
+  const total=totalFare+taxes+rent+res.stayCost-saveTotal;
+  return {cities,modes,segs,totalFare,taxes,city:0,rent,total,per:total/p,h:totalH,days:Math.max(1,Math.ceil(totalH/16))*legs,saveTotal,used,warns,detour,segCount:n};
 }
 function multiToMode(r,res){
   const names=r.segs.map(s=>SHORT[s.md]);
   const detRows=r.segs.map((s,i)=>[`段${i+1}｜${s.from} → ${s.to}（${MODES[s.md].name}）`,s.fare]);
   if(r.taxes)detRows.push(["机建+燃油附加",r.taxes]);
   if(r.rent)detRows.push(["租车费（落地自驾，按天）",r.rent]);
-  detRows.push(["市内接驳打车（机场/车站·滴滴快车）",r.city]);
-  if(res.onTaxi)detRows.push([`当地市内打车（${res.stay}天）`,res.onTaxi]);
   if(res.stayCost)detRows.push(["住宿+餐饮（可关）",res.stayCost]);
   r.used.forEach(u=>detRows.push(["🎫 已抵扣："+u.label,-u.save]));
   const via=r.segs[0].to; // 第一个中转城市名（兼容 routeVerify 的单城市查询）
@@ -2162,7 +2102,7 @@ function aiTopTwo(A,B,res){
   const score=r=>{
     // 绕行归一化非线性化：轻微绕行（<1.3x）几乎不罚，明显绕行惩罚加速
     const detourNorm=maxD===minD?1:Math.pow((maxD-r.detour)/(maxD-minD),1.25);
-    // 警告分级扣分：绕行类警告严重性更高，其余（航程过短/打车过长/自驾疲劳）轻惩
+    // 警告分级扣分：绕行类警告严重性更高，其余（航程过短/自驾疲劳）轻惩
     let feas=1;
     if(r.warns&&r.warns.length)r.warns.forEach(w=>{feas-=/绕行/.test(w)?0.22:0.12;});
     feas=Math.max(0,feas);
@@ -2330,9 +2270,9 @@ function aiXferApplyCity(c){
    按"省钱"和"省时"分类展示各 Top3，复用 comboFeasible/evalCombo/comboToMode 只读不改动。 */
 function combosForCity(A,C,B,res){
   const out=[];
-  for(const m1 of ["rail","flight","bus","taxi"]){
+  for(const m1 of ["rail","flight","bus"]){
     if(!segViable(m1,A,C,segKm(A,C,m1)))continue; // 段1：设施+距离硬校验
-    for(const m2 of ["rail","flight","bus","taxi"]){
+    for(const m2 of ["rail","flight","bus"]){
       if(m1===m2)continue;
       if(!segViable(m2,C,B,segKm(C,B,m2)))continue; // 段2：设施+距离硬校验
       if(!comboFeasible(A,C,B,m1,m2))continue;
@@ -2411,7 +2351,7 @@ function applyCityCombo(kind,i){
    三层判定，结论分层输出：
    ① 直达层：官方离线时刻表是否收录直达车次/航班 → 证实(绿)/有设施待查证(黄)/无条件(红)
    ② 中转层：全网城市图 2 段搜索的结果池 → 可用中转枢纽数量与代表城市
-   ③ 陆路层：大巴/自驾/打车不受时刻表与设施限制，任意两城均可门到门（兜底）
+   ③ 陆路层：大巴/自驾不受时刻表与设施限制，任意两城均可门到门（兜底）
    结论：优（官方直达）→ 良（有直达设施或一转即达）→ 一般（仅陆路短途）→ 弱（无设施且无中转） */
 function reachInfo(A,B,pool){
   const F=A[0],T=B[0];
@@ -2428,7 +2368,7 @@ function reachInfo(A,B,pool){
   if(!tr.length&&!fl.length&&!railOK&&!airOK)rows.push(["🚄✈️ 直达","两城均无高铁站/民用机场，轨道与民航直达不可行","bad"]);
   if(hubs.length)rows.push(["🔗 中转","全网搜索筛得 "+hubs.length+" 个可用枢纽（如 "+hubs.slice(0,4).join("/")+(hubs.length>4?" 等":"")+"），一转即达","ok"]);
   else rows.push(["🔗 中转","全网 2 段搜索未找到合理中转（设施不满足、距离超限或绕行过大）","bad"]);
-  rows.push(["🚌 陆路","大巴/自驾/打车不受时刻表与设施限制，任意两城均可门到门（全程约 "+Math.round(hav(A,B)*state.rates.circRoad)+"km）","info"]);
+  rows.push(["🚌 陆路","大巴/自驾不受时刻表与设施限制，任意两城均可门到门（全程约 "+Math.round(hav(A,B)*state.rates.circRoad)+"km）","info"]);
   let verdict,vc,vbg;
   if(tr.length||fl.length){verdict="✅ 可达性优：官方直达在案，优先直达，中转作备选";vc="#15803d";vbg="#f0fdf4";}
   else if(railOK||airOK){verdict="✅ 可达性良：有直达设施（购票前请查证），全网中转可达";vc="#1d4ed8";vbg="#eff6ff";}
@@ -2463,7 +2403,7 @@ function nearToMode(r,res,nearKm){
 function recommendNear(A,B,res){
   const list=[];
   for(const N of nearCandidates(B)){
-    for(const m1 of ["rail","flight","bus","taxi","drive"]){
+    for(const m1 of ["rail","flight","bus","drive"]){
       if(!segViable(m1,A,N,segKm(A,N,m1)))continue; // 主段设施+距离硬校验（接驳段为用户手选，保留自由度）
       if(!comboFeasible(A,N,B,m1,state.near.m2))continue; // 复核主段与接驳段起讫点交通条件
       list.push(evalCombo(A,N,B,m1,state.near.m2,res));
@@ -2505,12 +2445,11 @@ function dayHtml(m,res){
   if(!m)return"";
   const R=state.rates,rooms=Math.ceil(res.p/2);
   const trans=m.total-(m.stay||0)-(m.onTaxi||0),perLeg=trans/res.legs;
-  const nightly=R.hotel*rooms,mealD=R.meal*res.p,taxiD=res.stay>0?(m.onTaxi||0)/res.stay:0;
+  const nightly=R.hotel*rooms,mealD=R.meal*res.p;
   const rows=[["第1天 · 出发日（"+m.name+"去程+接驳）",perLeg]];
   for(let d=1;d<=res.stay;d++){
     const parts=["住宿 ¥"+fmt(nightly),"餐饮 ¥"+fmt(mealD)];
-    if(taxiD>=1)parts.push("市内打车 ¥"+fmt(taxiD));
-    rows.push(["第"+(d+1)+"天 · 游玩（"+parts.join(" + ")+"）",nightly+mealD+taxiD]);
+    rows.push(["第"+(d+1)+"天 · 游玩（"+parts.join(" + ")+"）",nightly+mealD]);
   }
   if(res.legs===2)rows.push(["第"+(res.stay+2)+"天 · 返程日（"+m.name+"回程+接驳）",perLeg]);
   const sum=rows.reduce((s,r)=>s+r[1],0);
@@ -2665,7 +2604,7 @@ function _render(){
       cn.innerHTML="⚠ 中转城市未识别，请从下拉列表选择";
     }
   }else{
-    cn.textContent="启用后：出发 → 中转 → 目的地 多段组合（如空铁联运、打车接驳），同样享受优惠券抵扣";
+    cn.textContent="启用后：出发 → 中转 → 目的地 多段组合（如空铁联运、高铁+大巴接驳），同样享受优惠券抵扣";
   }
 
   // 指定中转城市的多方案对比（零侵入：只要用户填了中转城市就展示，不依赖 comboOn 开关）
@@ -2686,7 +2625,7 @@ function _render(){
       nn.innerHTML="⚠ 落地城镇未识别，请从下拉列表选择，或点左列「🎯 推荐周边点」自动填充";
     }
   }else{
-    nn.textContent="启用后：先到目的地周边的城市/城镇，再打车/大巴接驳进城（适合目的地无高铁站、无机场的情况），同样享受优惠券抵扣";
+    nn.textContent="启用后：先到目的地周边的城市/城镇，再大巴/高铁/租车接驳进城（适合目的地无高铁站、无机场的情况），同样享受优惠券抵扣";
   }
 
   const all=res.modes.concat(combos,nears);
@@ -2820,7 +2759,7 @@ function _render(){
     }
   }else{
     _showMoreCombos=false;
-    cn.textContent="启用后：出发 → 中转 → 目的地 两段组合（如空铁联运、打车接驳），自动推荐多种方案，各段享受对应优惠券抵扣";
+    cn.textContent="启用后：出发 → 中转 → 目的地 两段组合（如空铁联运、高铁+大巴接驳），自动推荐多种方案，各段享受对应优惠券抵扣";
   }
 
   // 周边城镇抵达卡片（在 cheapest/fastest 计算后生成，供推荐徽标判断）
@@ -2885,8 +2824,6 @@ function _render(){
     const userTag=m.key==="combo"?(m._tags||[]).map(t=>`<span style="font-size:10px;padding:1px 6px;border-radius:8px;margin-left:4px;background:${t.bg};color:${t.c}">${t.t}</span>`).join(""):"";
     const det=m.detRows?m.detRows.slice():[["交通票面（"+res.p+"人×"+res.legs+"程）",m.ticket]];
     if(m.taxes)det.push(["机建+燃油附加",m.taxes]);
-    if(m.city)det.push(["市内接驳打车（机场/车站·滴滴快车）",m.city]);
-    if(m.onTaxi)det.push(["当地市内打车（"+res.stay+"天）",m.onTaxi]);
     if(m.stay)det.push(["住宿+餐饮（可关）",m.stay]);
     m.saves.filter(s=>s.save>0).forEach(s=>det.push(["已抵扣："+s.label,-s.save]));
     /* 起始点车站名（展示用）：直达段取出发城市车站，两段方案逐段标注；含大巴段附到站距离口径 */
@@ -2924,7 +2861,6 @@ function _render(){
     if(m.key==="rail")return `<div ${st}>🎫 购票入口（${F} → ${T} · ${state.form.railType}字头·${clsName(state.form.railClass)}）：${a("12306 官网","https://www.12306.cn/index/")} / 12306 APP 搜「${F}—${T}」选${state.form.railType}字头${clsName(state.form.railClass)} · 车站窗口/自助售票机同价出票 · 官方渠道免手续费，热门车次可在线候补；第三方平台（携程/同程火车票）购票留意搭售</div>`;
     if(m.key==="flight")return `<div ${st}>🎫 购票入口（${F} → ${T} 航线）：各航司官网/APP（国航/东航/南航/海航等，廉航低价票多仅官网/APP 有售）· ${a("携程","https://www.ctrip.com/")} / ${a("飞猪","https://www.fliggy.com/")} / ${a("去哪儿","https://www.qunar.com/")} 多平台比价 · 机场直属柜台 · 低价常在航司官网，OTA 购票留意退改规则与行李额</div>`;
     if(m.key==="bus")return `<div ${st}>🎫 购票入口（${F} → ${T} 班线）：汽车站售票窗口/自助机 · ${a("巴士管家","https://www.chebada.com/")} 等联网售票 APP · 携程/同程「汽车票」频道 · 节假日热门班线建议提前 1–2 天购票</div>`;
-    if(m.key==="taxi")return `<div ${st}>🎫 无需购票：滴滴出行 / 高德打车 / 美团打车 APP 下单 · 跨城行程建议提前预约，上车前确认计价与高速费承担方式</div>`;
     if(m.key==="drive")return `<div ${st}>🎫 无需购票：出发前加满油/充满电 · 高速通行费走 ETC 或人工车道${state.form.tollFree?"（本次已按节假日免费计）":""} · 途中服务区补能休息</div>`;
     if((m.key==="combo"||m.key==="near")&&m.m1){
       const seg=(md,f,t)=>{
@@ -2932,15 +2868,14 @@ function _render(){
         if(md==="rail")return `${a("12306 官网/APP","https://www.12306.cn/index/")} 搜「${f}—${t}」${sn?` · 出发站：${sn}`:""}`;
         if(md==="flight")return `航司官网/APP 或 ${a("携程","https://www.ctrip.com/")} / ${a("飞猪","https://www.fliggy.com/")}${sn?` · 出发机场：${sn}`:""}`;
         if(md==="bus")return `出发地汽车站窗口 / ${a("巴士管家","https://www.chebada.com/")} 等联网售票 APP${sn?` · 乘车站：${sn}`:""}`;
-        if(md==="taxi")return `滴滴/高德打车 APP 下单（无需购票）`;
         return `无需购票（自驾段自理油费/高速费）`;
       };
       const V=m.via||T,lbl=m.key==="near"?"周边落地两段":"组合联运两段";
       // 含大巴段：标注到达车站的距离（口径同费率设置「车站↔市区」，仅展示口径，不改变任何费用）
       const busSeg=m.m1==="bus"?[F,V]:(m.m2==="bus"?[V,T]:null);
       const bk=state.rates.stationCityKm;
-      const busLine=busSeg?`<br>　🚏 到达车站距离（大巴段·估算口径）：${busSeg[0]} 市区→${stationName(getCity(busSeg[0]),"bus")} 约 ${bk}km ｜ ${busSeg[1]} ${stationName(getCity(busSeg[1]),"bus")}→市区 约 ${bk}km（口径可在费率设置「车站↔市区打车」调整）`:"";
-      return `<div ${st}>🎫 购票入口（${lbl} · 分开购买）：<br>　段1 ${F} → ${V}（${SHORT[m.m1]}）：${seg(m.m1,F,V)}<br>　段2 ${V} → ${T}（${SHORT[m.m2]}）：${seg(m.m2,V,T)}${busLine}<br>　中转换乘建议预留 ≥2 小时接驳${(m.m1==="taxi"||m.m2==="taxi")?"；打车段可叠加滴滴券包":""}</div>`;
+      const busLine=busSeg?`<br>　🚏 到达车站距离（大巴段·估算口径）：${busSeg[0]} 市区→${stationName(getCity(busSeg[0]),"bus")} 约 ${bk}km ｜ ${busSeg[1]} ${stationName(getCity(busSeg[1]),"bus")}→市区 约 ${bk}km（口径可在费率设置「车站↔市区距离」调整）`:"";
+      return `<div ${st}>🎫 购票入口（${lbl} · 分开购买）：<br>　段1 ${F} → ${V}（${SHORT[m.m1]}）：${seg(m.m1,F,V)}<br>　段2 ${V} → ${T}（${SHORT[m.m2]}）：${seg(m.m2,V,T)}${busLine}<br>　中转换乘建议预留 ≥2 小时接驳</div>`;
     }
     return "";
   }
@@ -2954,11 +2889,10 @@ function _render(){
       if(md==="rail")return btn("🎫 12306","https://www.12306.cn/index/",hint)+btn("🐬 携程火车票","https://trains.ctrip.com/",hint)+btn("🛫 飞猪火车票","https://www.fliggy.com/",hint);
       if(md==="flight")return btn("✈️ 携程机票","https://flights.ctrip.com/itinerary/oneway/",hint)+btn("🛫 飞猪机票","https://www.fliggy.com/",hint)+btn("🐫 去哪儿机票","https://flight.qunar.com/",hint);
       if(md==="bus")return btn("🚌 巴士管家","https://www.chebada.com/",hint)+btn("🐬 携程汽车票","https://bus.ctrip.com/",hint);
-      if(md==="taxi")return btn("🚕 滴滴出行","https://www.didichuxing.com/",`跳转后需在 APP 内搜索：${f} → ${t}，跨城行程建议提前 1 小时预约`)+btn("📍 高德打车","https://amap.com/",`跳转后需在 APP 内搜索：${f} → ${t}，跨城行程建议提前 1 小时预约`);
       return ""; // drive 自驾无需购票
     };
     /* 直达方案：单组按钮 */
-    if(m.key==="rail"||m.key==="flight"||m.key==="bus"||m.key==="taxi"){
+    if(m.key==="rail"||m.key==="flight"||m.key==="bus"){
       const g=grp(m.key,F,T);
       return g?`<div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--line);display:flex;flex-wrap:wrap;align-items:center;gap:2px"><span style="font-size:11.5px;font-weight:600;color:var(--slate);margin-right:4px">🚀 一键购票：</span>${g}</div>`:"";
     }
@@ -3065,22 +2999,22 @@ function _render(){
       const wait=30,ride=cityRideTime(r.stationCityKm);
       rows.push(["🚄 主票时长（发车→到达）",`${fmtHcn(m.h)}（约${Math.round(m.km||0)}km ÷ 235km/h 含停站）`]);
       rows.push(["候车+安检（进站）",`${wait} 分钟/程 × ${legs}程`]);
-      rows.push(["市内接驳（两端车站·滴滴快车）",`${fmtHM(ride*2)}/程（车站${r.stationCityKm}km × 2端）`]);
+      rows.push(["市内接驳（两端车站）",`${fmtHM(ride*2)}/程（车站${r.stationCityKm}km × 2端）`]);
       rows.push(["门到门参考（单程）",`约 ${fmtHcn(m.h+(wait+ride*2)/60)}`]);
     }else if(m.key==="flight"){
       const wait=130,ride=cityRideTime(r.airportCityKm);
       rows.push(["✈️ 主票时长（含起降滑行）",`${fmtHcn(m.h)}（约${Math.round(m.km||0)}km ÷ 750km/h + 滑行25分）`]);
       rows.push(["值机+安检+取行李+提前到机场",`${wait} 分钟/程 × ${legs}程`]);
-      rows.push(["市内接驳（两端机场·滴滴快车）",`${fmtHM(ride*2)}/程（机场${r.airportCityKm}km × 2端）`]);
+      rows.push(["市内接驳（两端机场）",`${fmtHM(ride*2)}/程（机场${r.airportCityKm}km × 2端）`]);
       rows.push(["门到门参考（单程）",`约 ${fmtHcn(m.h+(wait+ride*2)/60)}`]);
     }else if(m.key==="bus"){
       const wait=20,ride=cityRideTime(r.stationCityKm);
       rows.push(["🚌 主票时长（含途中休息）",`${fmtHcn(m.h)}（约${Math.round(m.km||0)}km ÷ 78km/h）`]);
       rows.push(["候车（购票+上车）",`${wait} 分钟/程 × ${legs}程`]);
-      rows.push(["市内接驳（两端车站·滴滴快车）",`${fmtHM(ride*2)}/程（车站${r.stationCityKm}km × 2端）`]);
+      rows.push(["市内接驳（两端车站）",`${fmtHM(ride*2)}/程（车站${r.stationCityKm}km × 2端）`]);
       rows.push(["门到门参考（单程）",`约 ${fmtHcn(m.h+(wait+ride*2)/60)}`]);
-    }else if(m.key==="drive"||m.key==="taxi"){
-      rows.push([m.key==="drive"?"🚗 即门到门":"🚕 即门到门",`${fmtHcn(m.h)}（无接驳候车${m.key==="drive"?"，含服务区休息":"，含中途缓冲"}）`]);
+    }else if(m.key==="drive"){
+      rows.push(["🚗 即门到门",`${fmtHcn(m.h)}（无接驳候车，含服务区休息）`]);
     }else if(m.key==="combo"&&m.h1!=null){
       rows.push(["段1 主票时长",`${fmtHcn(m.h1)}（约${Math.round(m.k1||0)}km）`]);
       rows.push(["中转换乘（两段之间）",`${m.xfer} 分钟`]);
@@ -3350,7 +3284,7 @@ function drawAmap(A,B){
 function bindForm(){
   const f=state.form;
   $("fromCity").value=f.from;$("toCity").value=f.to;$("people").value=f.people;
-  $("stayDays").value=f.stayDays;$("taxiKmDay").value=f.taxiKmDay;
+  $("stayDays").value=f.stayDays;
   $("distOverride").value=f.distOverride||"";$("railClass").value=f.railClass;$("railType").value=f.railType;
   $("tollFree").checked=!!f.tollFree;
   $("transOnly").checked=!!f.transOnly;
@@ -3365,7 +3299,7 @@ function bindForm(){
   $("comboOn").checked=!!cb.enabled;renderComboChainUI();
   const nr=state.near||{};
   $("nearOn").checked=!!nr.enabled;$("nearCity").value=nr.city||"";
-  $("nearM1").value=nr.m1||"rail";$("nearM2").value=nr.m2||"taxi";
+  $("nearM1").value=nr.m1||"rail";$("nearM2").value=nr.m2||"bus";
 }
 function formEvents(){
   // 输入防抖：打字过程仅在停顿 120ms 后重算渲染，减少整表 DOM 重排，提升流畅度
@@ -3374,7 +3308,7 @@ function formEvents(){
   const sig=()=>{
     const tt=document.querySelector("#tripTypeSeg button.on");
     const gs=document.querySelector("#goSeg button.on"),bs=document.querySelector("#backSeg button.on");
-    return ["fromCity","toCity","people","stayDays","taxiKmDay","distOverride","railClass","railType","nearCity","goDate","backDate"].map(id=>$(id).value).join("|")
+    return ["fromCity","toCity","people","stayDays","distOverride","railClass","railType","nearCity","goDate","backDate"].map(id=>$(id).value).join("|")
       +"#"+(tt?tt.dataset.v:"")+"#"+$("tollFree").checked+"#"+$("transOnly").checked+"#"+$("studentTicket").checked
       +"#"+$("comboOn").checked+"|"+[...document.querySelectorAll("#comboStops input[data-stop]")].map(x=>x.value).join(",")+"$"+[...document.querySelectorAll("#comboModes select[data-seg]")].map(x=>x.value).join(",")
       +"#"+$("nearOn").checked+"|"+$("nearM1").value+"|"+$("nearM2").value
@@ -3388,7 +3322,7 @@ function formEvents(){
   };
   const upd=()=>{ clearTimeout(updTm); updTm=setTimeout(()=>apply(false),120); };
   window._flushForm=()=>{ if(updTm){clearTimeout(updTm);updTm=null;} apply(true); };
-  ["fromCity","toCity","people","stayDays","taxiKmDay","distOverride","railClass","railType","nearCity","goDate","backDate"].forEach(id=>{
+  ["fromCity","toCity","people","stayDays","distOverride","railClass","railType","nearCity","goDate","backDate"].forEach(id=>{
     $(id).addEventListener("input",upd);
   });
   ["railClass","railType","comboOn","nearM1","nearM2","nearOn","tollFree","transOnly","studentTicket"].forEach(id=>{
@@ -3435,7 +3369,7 @@ function formEvents(){
 function readForm(){
   const f=state.form;
   f.from=$("fromCity").value;f.to=$("toCity").value;f.people=$("people").value||1;
-  f.stayDays=$("stayDays").value||0;f.taxiKmDay=$("taxiKmDay").value||0;
+  f.stayDays=$("stayDays").value||0;
   f.distOverride=$("distOverride").value;f.railClass=$("railClass").value;f.railType=$("railType").value;
   f.tripType=document.querySelector("#tripTypeSeg button.on").dataset.v;
   f.tollFree=$("tollFree").checked;
@@ -3447,7 +3381,7 @@ function readForm(){
   const bs=document.querySelector("#backSeg button.on");f.backSeg=bs?bs.dataset.v:"mid";
   state.combo.enabled=$("comboOn").checked;
   readComboChainInputs(); // 动态中转链 → state.combo.cities/modes + 镜像 city/m1/m2
-  if(!state.near)state.near={enabled:false,city:"",m1:"rail",m2:"taxi"};
+  if(!state.near)state.near={enabled:false,city:"",m1:"rail",m2:"bus"};
   state.near.enabled=$("nearOn").checked;state.near.city=$("nearCity").value;
   state.near.m1=$("nearM1").value;state.near.m2=$("nearM2").value;
   save();
@@ -3478,9 +3412,6 @@ function delCoupon(id){state.coupons=state.coupons.filter(c=>c.id!==id);save();r
 
 /* ================= 平台限时优惠（策展式，一键添加到优惠券） ================= */
 const PLATFORM_OFFERS=[
-  {id:"didi1",title:"滴滴出行 · 周卡券包",mode:"taxi",type:"amount",value:80,scope:"order",cap:0,desc:"约 65–130 元/周，含 5 折神卡+立减券，打车/网约车通用"},
-  {id:"didi2",title:"滴滴出行 · 新用户立减",mode:"taxi",type:"amount",value:30,scope:"order",cap:0,desc:"首次注册新用户首单立减 20–50 元"},
-  {id:"amap1",title:"高德打车 · 限时立减",mode:"taxi",type:"amount",value:20,scope:"order",cap:0,desc:"高德地图打车入口，常有每日 20 元立减券"},
   {id:"cloudpay1",title:"云闪付 · 随机立减",mode:"any",type:"amount",value:10,scope:"order",cap:0,desc:"银联云闪付支付随机立减 1–30 元，节假日加码"},
   {id:"etcpay",title:"ETC · 高速费 9.5 折",mode:"drive",type:"percent",value:9.5,scope:"order",cap:0,desc:"全国 ETC 高速费默认 9.5 折（与节假日免费不叠加，按较低者计）"},
   {id:"rail1",title:"12306 · 积分抵扣",mode:"rail",type:"amount",value:10,scope:"person",cap:0,desc:"100 积分抵 1 元，1 万积分抵 100 元；新注册账号约送 5000 积分"},
@@ -5866,7 +5797,7 @@ const HOTEL_PEAK=[
   {kw:["丽江","大理","香格里拉","稻城","亚丁","九寨沟","青海湖","茶卡","拉萨","林芝","敦煌","张掖","呼伦贝尔","若尔盖"],m:[7,8,9,10]},
   {kw:["张家界","黄山","峨眉山","乐山","桂林","阳朔","贵阳","黄果树"],m:[7,8,10]}
 ];
-/* 策展住宿 POI：st/ap=到火车站/机场直线 km（打车费联动现有市区费率），metro=公交地铁；price=null 表示地图可见但网上暂无统一报价 */
+/* 策展住宿 POI：st/ap=到火车站/机场直线 km（仅距离参考），metro=公交地铁；price=null 表示地图可见但网上暂无统一报价 */
 const HOTEL_POIS={
 "上海":[
  {n:"人民广场·南京路连锁片区",c:[31.23,121.47],k:"budget",price:[320,460],area:"市中心枢纽",st:3,ap:45,metro:"🚇 1/2/8号线人民广场站",note:"步行南京路外滩，地铁直达虹桥枢纽"},
@@ -6438,8 +6369,7 @@ function renderHotelGuide(city,force){
   }
   const railName=stationName(city,"rail")||name+"站",airName=stationName(city,"flight")||name+"机场";
   const trafficLine=p=>{
-    const tF=Math.round(cityTaxiFare(p.st,name)),aF=Math.round(cityTaxiFare(p.ap,name));
-    return `<div style="font-size:10.5px;color:#64748b;margin-top:2px">🚄 ${railName} ${p.st}km · 打车约¥${tF}　｜　✈️ ${airName} ${p.ap}km · 打车约¥${aF}<br>${p.metro}　·　${p.note}</div>`;
+    return `<div style="font-size:10.5px;color:#64748b;margin-top:2px">🚄 ${railName} ${p.st}km　｜　✈️ ${airName} ${p.ap}km<br>${p.metro}　·　${p.note}</div>`;
   };
   const priced=pois.filter(p=>p.price!==null),unpriced=pois.filter(p=>p.price===null);
   const poiCard=p=>{
@@ -7480,7 +7410,7 @@ function focusScenic(lat,lng){
   ensureLeaflet(apply);
 }
 
-const RATE_MAP={s_rail2:"rail2",s_railDisc:"railDisc",s_railFirstMul:"railFirstMul",s_railBizMul:"railBizMul",s_flightDisc:"flightDisc",s_airportFee:"airportFee",s_fuelLow:"fuelLow",s_fuelHigh:"fuelHigh",s_busRate:"busRate",s_taxiStart:"taxiStart",s_taxiStartKm:"taxiStartKm",s_taxiPerKm:"taxiPerKm",s_taxiPerMin:"taxiPerMin",s_taxiFarKm:"taxiFarKm",s_taxiFarFee:"taxiFarFee",s_highwayFee:"highwayFee",s_fuelPrice:"fuelPrice",s_fuelCons:"fuelCons",s_rentDay:"rentDay",s_airportCityKm:"airportCityKm",s_stationCityKm:"stationCityKm",s_circRoad:"circRoad",s_hotel:"hotel",s_meal:"meal"};
+const RATE_MAP={s_rail2:"rail2",s_railDisc:"railDisc",s_railFirstMul:"railFirstMul",s_railBizMul:"railBizMul",s_flightDisc:"flightDisc",s_airportFee:"airportFee",s_fuelLow:"fuelLow",s_fuelHigh:"fuelHigh",s_busRate:"busRate",s_highwayFee:"highwayFee",s_fuelPrice:"fuelPrice",s_fuelCons:"fuelCons",s_rentDay:"rentDay",s_airportCityKm:"airportCityKm",s_stationCityKm:"stationCityKm",s_circRoad:"circRoad",s_hotel:"hotel",s_meal:"meal"};
 function openSettings(){
   const r=state.rates;
   for(const [id,k] of Object.entries(RATE_MAP)) $(id).value=r[k];
