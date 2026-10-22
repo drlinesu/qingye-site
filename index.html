@@ -315,11 +315,11 @@
 <link rel="dns-prefetch" href="//tile.openstreetmap.org">
 <link rel="preload" as="image" fetchpriority="high" href="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Cinematic%20seascape%20photograph%20at%20dawn%20blue%20hour%2C%20strong%20diagonal%20composition%2C%20shoreline%20running%20from%20lower%20left%20to%20upper%20right%20corner%2C%20wet%20sand%20reflecting%20the%20sky%2C%20warm%20golden%20sunrise%20glow%20meeting%20cool%20indigo%20twilight%2C%20soft%20sea%20mist%2C%20pastel%20gradient%20clouds%2C%20serene%20slow%20travel%20mood%2C%20minimalist%2C%20ultra%20detailed%202k%20landscape%20photography%2C%20no%20people&image_size=landscape_16_9">
 <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
-<script src="轻野-云盾.js?v=202610220229" defer></script>
-<script src="轻野-桥接.js?v=202610220229" defer></script>
-<script src="轻野-启程.js?v=202610220229" defer></script>
-<script src="轻野-捐赠.js?v=202610220229" defer></script>
-<script src="轻野-云仓.js?v=202610220229" defer></script>
+<script src="轻野-云盾.js?v=202610220814" defer></script>
+<script src="轻野-桥接.js?v=202610220814" defer></script>
+<script src="轻野-启程.js?v=202610220814" defer></script>
+<script src="轻野-捐赠.js?v=202610220814" defer></script>
+<script src="轻野-云仓.js?v=202610220814" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -1793,8 +1793,11 @@ function recommendCombos(A,B,res){ // 全网算法：城市图 2 段搜索 → �
 const COMBO_MODE_OPTS=[["rail","🚄 高铁"],["flight","✈️ 飞机"],["bus","🚌 大巴"],["taxi","🚕 打车/网约车"],["drive","🚗 自驾/租车"]];
 function comboChainGet(){ // 读取当前链：cities=中转城市名数组（含空行），modes=每段方式（长度=城市数+1；默认高铁，末段默认飞机）
   const cb=state.combo||{};
-  let cities=Array.isArray(cb.cities)?cb.cities.slice():[];
-  if(!cities.length&&(cb.city||"").trim())cities=[(cb.city||"").trim()];
+  // 统一强制为字符串：历史污染（旧版本曾把接驳费数值写进 city/cities）在读取时自愈，避免下游 .trim 崩溃
+  let cities=(Array.isArray(cb.cities)?cb.cities:[]).map(c=>typeof c==="string"?c:(c==null?"":String(c)))
+    .filter(c=>!/^\d+(\.\d+)?$/.test(c.trim())); // 丢弃纯数字垃圾值，视为未填
+  if(!cities.length&&(cb.city||"").toString().trim()&&!/^\d+(\.\d+)?$/.test(String(cb.city).trim()))cities=[String(cb.city).trim()];
+  cb.cities=cities.slice();cb.city=cities[0]||""; // 自愈后回写 state，杜绝其他路径直接读 state.combo.city 拿到脏值
   const nSeg=Math.max(1,cities.length+1);
   let modes=Array.isArray(cb.modes)?cb.modes.slice():[];
   for(let i=0;i<nSeg;i++)if(!MODES[modes[i]])modes[i]=(i===nSeg-1&&nSeg>=2)?"flight":"rail"; // 默认以高铁/飞机为主
@@ -1862,7 +1865,8 @@ function autoRecommend(){
   const vPool=pool.filter(r=>segVerified(r.m1,A[0],r.C[0])===true&&segVerified(r.m2,r.C[0],B[0])===true);
   const best=vPool.length?vPool[0]:((aiTopTwo(A,B,res)[0])||null); // aiTopTwo 综合科学评分（费用+时长+绕行+可行性+官方证实）
   if(!best){toast("全网搜索未找到可达中转方案，直达或陆路可能更优");return;}
-  const bc=best.city||(best.C&&best.C[0])||"";
+  // 注意：候选池裸对象（evalCombo 结果）的 .city 是「市内接驳费」数值，城市名在 C[0]；aiTopTwo 对象的 .city 才是名字符串
+  const bc=(best.C&&best.C[0])||(typeof best.city==="string"?best.city:"");
   state.combo.enabled=true;$("comboOn").checked=true;
   comboChainSet([bc],[best.m1,best.m2]);
   save();render();
@@ -2272,7 +2276,7 @@ function renderCityCombos(A,C,B,res){
   const box=$("cityCombosBody");
   if(!box)return;
   // 额外检查 state.combo.city 非空（getCity("") 因 includes("") 永远 true 会返回 CITIES[0]，导致空输入误判为有中转城市）
-  if(!(A&&C&&B)||!(state.combo.city||"").trim()){box.innerHTML="";return;}
+  if(!(A&&C&&B)||!String(state.combo.city||"").trim()){box.innerHTML="";return;}
   let list;
   try{list=combosForCityC(A,C,B,res);}catch(e){list=[];}
   window._cityCombos=list;
