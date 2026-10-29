@@ -1270,6 +1270,16 @@
           el('button', { class: 'cs-btn cs-btn-outline cs-btn-sm', onclick: function () { Admin.logout(); self.renderLogin(); } }, ['退出'])
         ]);
 
+        /* 模块自检：桥接/云仓/捐赠任一没加载上时，明确告诉用户是哪几个文件 */
+        var missingMods = [];
+        if (!global.QYBridge) missingMods.push('轻野-桥接.js（BaaS 连接）');
+        if (!global.QYHub) missingMods.push('轻野-云仓.js（GitHub 同步）');
+        if (!global.QYDonation) missingMods.push('轻野-捐赠.js（捐赠）');
+        var modWarn = missingMods.length ? el('div', {
+          class: 'cs-vpn-note',
+          style: 'background:#fef2f2;border-color:#fecaca;color:#b91c1c'
+        }, ['⚠️ 以下模块未加载：' + missingMods.join('、') + '。请按 Ctrl+Shift+R 强制刷新；仍缺失时检查文件是否被占用，或 F12 → Console 看是否有语法错误。']) : null;
+
       // 全网公告管理（接入 Supabase 后端，发布后用户端启动即拉取展示）
       var annTitleInput = el('input', { type: 'text', placeholder: '公告标题（如：国庆假期系统维护）', style: 'width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:8px;box-sizing:border-box' });
       var annContentInput = el('textarea', { placeholder: '公告正文（支持多行，将展示在所有用户端顶部）', rows: 4, style: 'width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:8px;box-sizing:border-box;resize:vertical;font-family:inherit' });
@@ -1384,7 +1394,7 @@
 
         self.gateEl.innerHTML = '';
         var cloudCard = self.buildCloudCard();
-        var dnCards = [header, annCard, userCard, wafCard, mfaCard, cloudCard];
+        var dnCards = [modWarn, header, annCard, userCard, wafCard, mfaCard, cloudCard];
         /* BaaS 桥接配置卡（mfaCard 后） */
         if (window.QYBridge && typeof window.QYBridge.renderAdminCard === 'function') {
           var bridgeCard = el('div', { class: 'cs-card' });
