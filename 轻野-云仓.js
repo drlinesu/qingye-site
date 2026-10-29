@@ -1,4 +1,4 @@
-﻿/* ============================================================
+/* ============================================================
  * 轻野 · 云仓 (Light Wild · Cloud Hub)
  * GitHub 配置同步模块 —— 零侵入：不修改 轻野.html 的任何计算与渲染逻辑。
  *   ① 管理端：在 云盾 管理控制台注入「GitHub 配置」卡片
@@ -134,6 +134,26 @@
     _apiUrl: function (s) {
       return 'https://api.github.com/repos/' + s.owner + '/' + s.repo + '/contents/' + s.path + '?ref=' + s.branch;
     },
+    /* 带超时的 fetch：raw.githubusercontent.com 在国内经常超时，
+       不设上限会把「等配置」拖到几十秒，这里 6s 就切到 jsDelivr。 */
+    _fetchT: function (url, opts, ms) {
+      if (typeof AbortController === 'undefined') return fetch(url, opts);
+      var ctrl = new AbortController();
+      var timer = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, ms || 6000);
+      var o = {};
+      for (var k in (opts || {})) o[k] = opts[k];
+      o.signal = ctrl.signal;
+      return fetch(url, o).then(function (r) { clearTimeout(timer); return r; }, function (e) { clearTimeout(timer); throw e; });
+    },
+    /* 通知 jsDelivr 刷新缓存（失败静默）：国内 raw 不可达时，jsDelivr 是主读取链路，
+       不主动 purge 的话最长要等 12 小时。 */
+    _purgeCdn: function (s) {
+      try {
+        if (typeof fetch !== 'function') return;
+        fetch('https://purge.jsdelivr.net/gh/' + s.owner + '/' + s.repo + '@' + s.branch + '/' + s.path, { cache: 'no-store' })
+          .catch(function () {});
+      } catch (e) {}
+    },
 
     /* 读取 GitHub 配置（用户端，无 token） */
     getConfig: function () {
@@ -143,8 +163,8 @@
 
       var cached = self._readCache();
 
-      /* 尝试 raw.githubusercontent.com（实时） */
-      return fetch(self._rawUrl(info), { cache: 'no-store' })
+      /* 尝试 raw.githubusercontent.com（实时，6s 超时） */
+      return self._fetchT(self._rawUrl(info), { cache: 'no-store' }, 6000)
         .then(function (r) {
           if (!r.ok) throw new Error('raw ' + r.status);
           return r.text();
@@ -156,7 +176,7 @@
         })
         .catch(function () {
           /* 降级 jsDelivr CDN */
-          return fetch(self._jsdelivrUrl(info))
+          return self._fetchT(self._jsdelivrUrl(info), null, 8000)
             .then(function (r) {
               if (!r.ok) throw new Error('jsDelivr ' + r.status);
               return r.text();
@@ -234,6 +254,7 @@
           })
           .then(function () {
             self._writeCache(mergedConfig);
+            self._purgeCdn(s); // 让 jsDelivr 尽快拿到新内容（国内 raw 常不可达）
             return { ok: true, msg: '已同步到 GitHub' };
           });
       })
