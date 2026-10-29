@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿/* ============================================================
+﻿﻿/* ============================================================
  * 轻野 · 桥接 (Light Wild · Bridge)
  * BaaS 中间层 —— 唯一与 Supabase 交互的模块（安全保护 + 隔离）
  *   ① 设计目的：后端只集中在本文件，后续迁移只改此一处
@@ -146,11 +146,30 @@
       } catch (e) {}
     },
 
+    /* 匿名只读客户端（不带登录态）：
+       config 是公开数据，用 anon 角色读最稳；否则已登录用户的 JWT 会让请求变成 authenticated，
+       一旦该角色缺 SELECT 授权，公告/档位就读不出来。写操作仍走 _getClient（带身份）。 */
+    _getAnonClient: function () {
+      var self = this;
+      if (self._anonClient) return Promise.resolve(self._anonClient);
+      return self.getSettings().then(function (s) {
+        var url = normalizeUrl(s.url);
+        if (!url || !s.anonKey) return null;
+        if (!global.supabase || typeof global.supabase.createClient !== 'function') return null;
+        try {
+          self._anonClient = global.supabase.createClient(url, String(s.anonKey).trim(), {
+            auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+          });
+          return self._anonClient;
+        } catch (e) { return null; }
+      });
+    },
+
     /* 读取云端 config（带缓存，降级本机缓存） */
     getConfig: function () {
       var self = this;
       var cached = self._readCache();
-      return self._getClient().then(function (client) {
+      return self._getAnonClient().then(function (client) {
         if (!client) return cached || null;
         return client.from('config').select('value').eq('key', CONFIG_ROW_KEY).maybeSingle()
           .then(function (res) {
@@ -455,7 +474,13 @@
         return Promise.resolve({ ok: false, msg: 'Supabase SDK 未加载（CDN 被拦截或未联网）：刷新重试，或把 SDK 放到本地引用' });
       }
       try {
-        var c = global.supabase.createClient(url, key);
+        /* 关键：用「无会话」客户端测连接。
+           管理端如果已经登录了云端身份（邮箱 OTP），同源的 supabase-js 会把 JWT 带进新客户端，
+           请求角色变成 authenticated 而不是 anon —— 看起来像「密钥坏了」，其实是被 RLS/GRANT 拦住。
+           这里显式关掉会话持久化，测的就真是这把 key 的匿名能力。 */
+        var c = global.supabase.createClient(url, key, {
+          auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+        });
         return c.from('config').select('*').limit(1)
           .then(function (res) {
             if (res.error) return { ok: false, msg: explainErr(res.error.message || res.error.msg || JSON.stringify(res.error)) };
@@ -474,14 +499,24 @@
       var self = this;
       return self.getSettings().then(function (s) {
         if (!s.url) return { ok: false, msg: '未配置 Supabase URL' };
-        if (!serviceKey) return { ok: false, msg: '请先粘贴 service_role 密钥' };
+        var sk = String(serviceKey || '').trim();
+        if (!sk) return { ok: false, msg: '请先粘贴 service_role 密钥' };
+        if (/^sb_publishable_/i.test(sk)) {
+          return { ok: false, msg: '这是 publishable key（前端公开密钥），无法访问 Auth 管理接口。请改用 Settings → API Keys 里的 service_role / secret key' };
+        }
+        if (/^sb_anon_/i.test(sk)) {
+          return { ok: false, msg: '这是匿名密钥，无法访问 Auth 管理接口。请改用 service_role / secret key' };
+        }
+        if (sk.length < 40) {
+          return { ok: false, msg: '密钥看起来不完整（当前 ' + sk.length + ' 字符）。service_role 通常是长 JWT 或 sb_secret_ 开头' };
+        }
         var all = [];
         var page = 1;
         function req(p) {
           return fetch(s.url + '/auth/v1/admin/users?per_page=200&page=' + p, {
-            headers: { apikey: serviceKey, Authorization: 'Bearer ' + serviceKey }
+            headers: { apikey: sk, Authorization: 'Bearer ' + sk }
           }).then(function (r) {
-            if (r.status === 401 || r.status === 403) throw new Error('密钥无效或权限不足（需 service_role 密钥）');
+            if (r.status === 401 || r.status === 403) throw new Error('密钥被拒绝：确认是 service_role / secret key，且属于该项目');
             if (!r.ok) throw new Error('后端返回 HTTP ' + r.status);
             return r.json();
           });
@@ -570,6 +605,7 @@
         if (!st.url || !st.anonKey) { status.style.color = '#dc2626'; status.textContent = '请填写 URL 和 anon key'; return; }
         self.saveSettings(st).then(function () {
           self._client = null; /* 重置缓存 client */
+          self._anonClient = null;
           status.style.color = '#16a34a';
           status.textContent = '✅ 配置已保存（加密存储）';
           loadSettings();
