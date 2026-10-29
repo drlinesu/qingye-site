@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/* ============================================================
+/* ============================================================
  * 轻野 · 云盾 (Light Wild · Cloud Shield)
  * 客户端安全网关 —— 纯浏览器原生 API 实现（零后端、零依赖、免费）
  * 功能：邮箱验证登入 / 接口防刷 / WAF / 证书认证 / 管理端MFA / 数据加密 / 云端储存 / 独立管理端
@@ -10,7 +10,7 @@
   'use strict';
 
   var STORAGE_PREFIX = 'cs_';
-  var CS_VERSION = '1.2.0';
+  var CS_VERSION = '1.3.0';
   // 独立管理端网页（与用户端分离）
   var ADMIN_PAGE = '轻野-管理端.html';
   // 页面模式：管理端页面在加载云盾前设置 window.__CS_ADMIN__ = true
@@ -39,6 +39,15 @@
     var a = new Uint8Array(n);
     crypto.getRandomValues(a);
     return Array.from(a).map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+  }
+  // 恒定时间比较：避免通过响应时间侧信道推断口令哈希
+  function safeEqual(a, b) {
+    a = String(a == null ? '' : a);
+    b = String(b == null ? '' : b);
+    if (a.length !== b.length) return false;
+    var r = 0;
+    for (var i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    return r === 0;
   }
   function b64enc(buf) {
     var bytes = new Uint8Array(buf);
@@ -118,9 +127,19 @@
         return new TextDecoder().decode(pt);
       });
     },
-    // 哈希（SHA-256）
+    // 哈希（SHA-256，仅用于非口令场景，如设备标识）
     hash: function (text) {
       return crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)).then(buf2hex);
+    },
+    // 口令派生（PBKDF2-SHA256 + 随机盐）：管理员凭据专用，抗彩虹表与暴力枚举
+    pbkdf2: function (password, saltB64, iterations) {
+      var salt = b64dec(saltB64);
+      var iter = iterations || 210000;
+      return crypto.subtle.importKey('raw', new TextEncoder().encode(String(password)), 'PBKDF2', false, ['deriveBits'])
+        .then(function (base) {
+          return crypto.subtle.deriveBits({ name: 'PBKDF2', salt: salt, iterations: iter, hash: 'SHA-256' }, base, 256);
+        })
+        .then(function (bits) { return buf2hex(bits); });
     }
   };
 
@@ -611,72 +630,129 @@
 
   /* ---------- 管理端 ---------- */
   var Admin = {
-    // 管理员凭证（免费方案：本地凭证，生产应使用安全后端）
-    // 默认账号 admin / 密码 cs@2024 / 密钥 cs-key-2024（首次登录后可改）
-    DEFAULT_USER: 'admin',
-    DEFAULT_PASS: 'cs@2024',
-    DEFAULT_KEY: 'cs-key-2024',
-    creds: function () {
-      return Store.json('adminCred') || { user: 'admin', passHash: null, accessKeyHash: null, mfaSecret: null, mfaEnabled: false };
+    /* 管理端凭据：不内置任何默认账号/密码/密钥。
+       首次打开管理端必须完成「初始化」，口令以 PBKDF2-SHA256(21 万轮) + 独立随机盐
+       保存在本机；旧版 admin / cs@2024 / cs-key-2024 默认凭据已彻底废弃，
+       残留的旧版（无盐 SHA-256）凭据会被判定为未初始化并强制重建。
+       注意：本机凭据只是 UI 门禁，真正的服务端边界是 Supabase RLS。 */
+    ITERATIONS: 210000,
+    PASS_MIN: 12,
+    KEY_MIN: 16,
+    // 管理端会话空闲超时（无操作 30 分钟自动登出）
+    SESSION_TTL: 30 * 60 * 1000,
+    creds: function () { return Store.json('adminCred') || null; },
+    // v2（带盐）才算已初始化；旧版结构一律视为未初始化
+    isInitialized: function () {
+      var c = this.creds();
+      return !!(c && c.v >= 2 && c.passHash && c.keyHash && c.salt && c.keySalt);
+    },
+    _salt: function () { return b64enc(crypto.getRandomValues(new Uint8Array(16)).buffer); },
+    _pw: function (text, salt) { return Crypto.pbkdf2(text, salt, this.ITERATIONS); },
+    _weak: function (val, label, min) {
+      var v = String(val == null ? '' : val);
+      if (v.length < min) return label + '至少 ' + min + ' 位';
+      if (!/[A-Za-z]/.test(v) || !/\d/.test(v)) return label + '需同时包含字母和数字';
+      if (/^(.)\1+$/.test(v)) return label + '不能是重复字符';
+      var low = v.toLowerCase();
+      var bad = ['cs@2024', 'cs-key-2024', 'cs2024', 'admin', 'password', '123456', 'qwerty', 'qingye', 'letmein'];
+      for (var i = 0; i < bad.length; i++) {
+        if (low.indexOf(bad[i]) > -1) return label + '包含常见弱口令片段（' + bad[i] + '）';
+      }
+      return null;
+    },
+    validate: function (user, pass, key) {
+      if (!/^[A-Za-z0-9_.-]{3,32}$/.test(String(user || ''))) return '账号需为 3-32 位字母/数字/下划线';
+      if (String(pass) === String(key)) return '密码与访问密钥不能相同';
+      return this._weak(pass, '密码', this.PASS_MIN) || this._weak(key, '访问密钥', this.KEY_MIN) || null;
+    },
+    // 首次初始化：仅在未初始化时可用
+    initialize: function (user, pass, key) {
+      var self = this;
+      if (self.isInitialized()) return Promise.reject(new Error('管理端已初始化，如需重置请清除本站浏览器数据'));
+      var bad = self.validate(user, pass, key);
+      if (bad) return Promise.reject(new Error(bad));
+      var salt = self._salt(), keySalt = self._salt();
+      return Promise.all([self._pw(pass, salt), self._pw(key, keySalt)]).then(function (hs) {
+        Store.json('adminCred', {
+          v: 2, user: String(user), salt: salt, passHash: hs[0],
+          keySalt: keySalt, keyHash: hs[1],
+          mfaSecret: null, mfaEnabled: false, createdAt: now(), updatedAt: now()
+        });
+        return { user: String(user) };
+      });
+    },
+    // 供「修改密码 / 修改密钥」校验旧凭据
+    verifyPassword: function (pass) {
+      var self = this, c = self.creds();
+      if (!c || !c.salt) return Promise.resolve(false);
+      return self._pw(pass, c.salt).then(function (h) { return safeEqual(h, c.passHash); }).catch(function () { return false; });
+    },
+    verifyAccessKey: function (key) {
+      var self = this, c = self.creds();
+      if (!c || !c.keySalt) return Promise.resolve(false);
+      return self._pw(key, c.keySalt).then(function (h) { return safeEqual(h, c.keyHash); }).catch(function () { return false; });
     },
     setPassword: function (pass) {
-      return Crypto.hash(pass).then(function (h) {
-        var c = Admin.creds();
-        c.passHash = h;
+      var self = this, c = self.creds();
+      if (!c) return Promise.reject(new Error('管理端未初始化'));
+      var bad = self._weak(pass, '密码', self.PASS_MIN);
+      if (bad) return Promise.reject(new Error(bad));
+      var salt = self._salt();
+      return self._pw(pass, salt).then(function (h) {
+        c.v = 2; c.salt = salt; c.passHash = h; c.updatedAt = now();
         Store.json('adminCred', c);
         return true;
       });
     },
     setAccessKey: function (key) {
-      return Crypto.hash(key).then(function (h) {
-        var c = Admin.creds();
-        c.accessKeyHash = h;
+      var self = this, c = self.creds();
+      if (!c) return Promise.reject(new Error('管理端未初始化'));
+      var bad = self._weak(key, '访问密钥', self.KEY_MIN);
+      if (bad) return Promise.reject(new Error(bad));
+      var keySalt = self._salt();
+      return self._pw(key, keySalt).then(function (h) {
+        c.v = 2; c.keySalt = keySalt; c.keyHash = h; c.updatedAt = now();
         Store.json('adminCred', c);
         return true;
       });
     },
     login: function (user, pass, accessKey, mfaCode) {
+      var self = this;
+      if (!self.isInitialized()) return Promise.reject(new Error('ADMIN_NOT_INITIALIZED'));
       var rl = RateLimit.check('login');
-      if (!rl.ok) return Promise.reject(new Error('登录尝试过于频繁，请 ' + rl.remain + ' 秒后重试'));
-      var waf = Waf.check(accessKey);
-      if (!waf.ok) { Waf.logAttack(accessKey, waf.reason); return Promise.reject(new Error(waf.reason)); }
-      var c = Admin.creds();
-      if (user !== c.user) return Promise.reject(new Error('管理员账号错误'));
-      // 首次登录无密码哈希，设置默认
-      if (!c.passHash || !c.accessKeyHash) {
-        return Promise.all([Crypto.hash(Admin.DEFAULT_PASS), Crypto.hash(Admin.DEFAULT_KEY)]).then(function (hs) {
-          c.passHash = hs[0];
-          c.accessKeyHash = hs[1];
-          Store.json('adminCred', c);
-          return Admin._verify(pass, accessKey, c, mfaCode);
-        });
-      }
-      return Admin._verify(pass, accessKey, c, mfaCode);
-    },
-    _verify: function (pass, accessKey, c, mfaCode) {
-      return Promise.all([Crypto.hash(pass), Crypto.hash(accessKey)]).then(function (hs) {
-        if (hs[0] !== c.passHash) return Promise.reject(new Error('密码错误'));
-        if (hs[1] !== c.accessKeyHash) return Promise.reject(new Error('访问密钥错误'));
+      if (!rl.ok) return Promise.reject(new Error('登入尝试过于频繁，请 ' + rl.remain + ' 秒后重试'));
+      var waf = Waf.check(String(user) + ' ' + String(accessKey));
+      if (!waf.ok) { Waf.logAttack(String(user), waf.reason); return Promise.reject(new Error(waf.reason)); }
+      var c = self.creds();
+      if (String(user) !== String(c.user)) return Promise.reject(new Error('账号或口令错误'));
+      return Promise.all([self._pw(pass, c.salt), self._pw(accessKey, c.keySalt)]).then(function (hs) {
+        if (!safeEqual(hs[0], c.passHash) || !safeEqual(hs[1], c.keyHash)) {
+          Waf.logAttack(String(user), '管理端凭据错误');
+          return Promise.reject(new Error('账号或口令错误'));
+        }
         if (c.mfaEnabled && c.mfaSecret) {
           if (!mfaCode) return Promise.reject(new Error('MFA_REQUIRED'));
           return Mfa.verify(c.mfaSecret, mfaCode).then(function (ok) {
-            if (!ok) return Promise.reject(new Error('MFA 验证码错误'));
-            Store.json('adminSession', { user: c.user, loginAt: now(), lastAt: now() });
+            if (!ok) return Promise.reject(new Error('MFA 动态码错误'));
+            self._open(c.user);
             return true;
           });
         }
-        Store.json('adminSession', { user: c.user, loginAt: now(), lastAt: now() });
+        self._open(c.user);
         return true;
       });
     },
+    _open: function (user) {
+      // 会话与设备证书绑定：把 localStorage 拷到别的设备无法直接复用会话
+      Store.json('adminSession', { user: user, loginAt: now(), lastAt: now(), fp: Cert.fingerprint() });
+    },
     logout: function () { Store.del('adminSession'); },
-    // 管理端会话空闲超时（网页保护：无操作 30 分钟自动登出）
-    SESSION_TTL: 30 * 60 * 1000,
     sessionState: function () {
       var s = Store.json('adminSession');
       if (!s) return 'none';
+      if (!s.fp || s.fp !== Cert.fingerprint()) { Store.del('adminSession'); return 'none'; }
       var last = s.lastAt || s.loginAt || 0;
-      if (now() - last > Admin.SESSION_TTL) { Store.del('adminSession'); return 'expired'; }
+      if (now() - last > this.SESSION_TTL) { Store.del('adminSession'); return 'expired'; }
       return 'active';
     },
     touchSession: function () {
@@ -752,9 +828,13 @@
       } catch (e) {}
       self.renderLogin();
     },
-    // 独立管理端页面初始化：四因子验证 + 会话空闲自动锁定
+    // 独立管理端页面初始化：未初始化 → 初始化向导；否则登入/会话校验
     initAdminPage: function () {
       var self = this;
+      if (!Admin.isInitialized()) {
+        self.renderAdminSetup(Admin.creds() ? 'legacy' : '');
+        return;
+      }
       var state = Admin.sessionState();
       if (state === 'active') {
         self.renderAdminPanel();
@@ -801,6 +881,66 @@
       ]);
       self.gateEl.appendChild(box);
       self.renderUserForm(form);
+    },
+    // 管理端首次初始化：没有任何内置默认凭据，由使用者自行设定
+    renderAdminSetup: function (legacy) {
+      var self = this;
+      self._ensureGate();
+      self.gateEl.innerHTML = '';
+      self._lockBody(true);
+
+      var uInput = el('input', { type: 'text', placeholder: '管理员账号（3-32 位字母/数字/下划线）', id: 'csInitUser', value: 'admin', autocomplete: 'off' });
+      var pInput = el('input', { type: 'password', placeholder: '管理员密码（≥12 位，含字母和数字）', id: 'csInitPass', autocomplete: 'new-password' });
+      var p2Input = el('input', { type: 'password', placeholder: '确认密码', id: 'csInitPass2', autocomplete: 'new-password' });
+      var kInput = el('input', { type: 'password', placeholder: '访问密钥（≥16 位，含字母和数字）', id: 'csInitKey', autocomplete: 'new-password' });
+      var k2Input = el('input', { type: 'password', placeholder: '确认访问密钥', id: 'csInitKey2', autocomplete: 'new-password' });
+      var btn = el('button', { class: 'cs-btn cs-btn-primary', id: 'csInitBtn' }, ['创建本机管理员凭据']);
+      var msg = el('div', { class: 'cs-msg', id: 'csMsg' });
+
+      var warn = el('div', { class: 'cs-vpn-note' }, [
+        legacy
+          ? '⚠️ 检测到旧版本地凭据（默认口令时代），已作废。请重新设置一组只有你知道的账号与口令。'
+          : '⚠️ 管理端没有任何默认账号。这组凭据只保存在本机浏览器；换设备或清缓存需重新初始化。'
+      ]);
+
+      var submit = function () {
+        if (btn.disabled) return;
+        var u = uInput.value.trim(), p = pInput.value, p2 = p2Input.value, k = kInput.value, k2 = k2Input.value;
+        if (p !== p2) { msg.className = 'cs-msg cs-msg-error'; msg.textContent = '两次输入的密码不一致'; return; }
+        if (k !== k2) { msg.className = 'cs-msg cs-msg-error'; msg.textContent = '两次输入的访问密钥不一致'; return; }
+        btn.disabled = true; btn.classList.add('cs-btn-loading');
+        msg.className = 'cs-msg'; msg.textContent = '正在生成 PBKDF2 凭据…';
+        Admin.initialize(u, p, k).then(function () {
+          return Admin.login(u, p, k);
+        }).then(function () {
+          self.renderAdminPanel();
+          self._armIdleGuard();
+        }).catch(function (e) {
+          btn.disabled = false; btn.classList.remove('cs-btn-loading');
+          msg.className = 'cs-msg cs-msg-error';
+          msg.textContent = (e && e.message) || String(e);
+        });
+      };
+      btn.onclick = submit;
+      [uInput, pInput, p2Input, kInput, k2Input].forEach(function (inp) {
+        inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+      });
+
+      var box = el('div', { class: 'cs-box' }, [
+        el('div', { class: 'cs-logo' }, ['🔐']),
+        el('h1', { class: 'cs-title' }, ['初始化管理端']),
+        el('p', { class: 'cs-sub' }, ['首次使用 · 凭据由你设定，密码与访问密钥分开保管']),
+        warn,
+        el('div', { class: 'cs-row' }, [uInput]),
+        el('div', { class: 'cs-row' }, [pInput]),
+        el('div', { class: 'cs-row' }, [p2Input]),
+        el('div', { class: 'cs-row' }, [kInput]),
+        el('div', { class: 'cs-row' }, [k2Input]),
+        el('div', { class: 'cs-row' }, [btn]),
+        msg,
+        el('p', { class: 'cs-meta', style: 'margin-top:10px' }, ['初始化后建议立即绑定 MFA；并按《管理端安全加固手册》收紧 Supabase RLS（本机凭据只是 UI 门禁）。'])
+      ]);
+      self.gateEl.appendChild(box);
     },
     // 独立管理端登入页（账号+密码+访问密钥+MFA 四因子）
     renderAdminLogin: function (notice) {
@@ -1070,13 +1210,13 @@
     },
     renderAdminForm: function (form) {
       var self = this;
-      var userInput = el('input', { type: 'text', placeholder: '管理员账号', id: 'csAdmUser', value: 'admin' });
-      var passInput = el('input', { type: 'password', placeholder: '管理员密码', id: 'csAdmPass' });
-      var keyInput = el('input', { type: 'password', placeholder: '访问密钥', id: 'csAdmKey' });
-      var mfaInput = el('input', { type: 'text', placeholder: 'MFA 动态码（如已绑定）', maxlength: '6', id: 'csAdmMfa' });
+      var userInput = el('input', { type: 'text', placeholder: '管理员账号', id: 'csAdmUser', autocomplete: 'username' });
+      var passInput = el('input', { type: 'password', placeholder: '管理员密码', id: 'csAdmPass', autocomplete: 'current-password' });
+      var keyInput = el('input', { type: 'password', placeholder: '访问密钥', id: 'csAdmKey', autocomplete: 'off' });
+      var mfaInput = el('input', { type: 'text', placeholder: 'MFA 动态码（如已绑定）', maxlength: '6', id: 'csAdmMfa', autocomplete: 'one-time-code' });
       var loginBtn = el('button', { class: 'cs-btn cs-btn-primary', id: 'csAdmLoginBtn' }, ['进入管理端']);
       var msg = el('div', { class: 'cs-msg', id: 'csMsg' });
-      var vpnNote = el('div', { class: 'cs-vpn-note' }, ['⚠️ 管理端建议通过 VPN 访问，并启用 MFA 二次验证；访问密钥默认 cs-key-2024']);
+      var vpnNote = el('div', { class: 'cs-vpn-note' }, ['⚠️ 凭据仅存本机，没有默认口令。管理端不要部署到公网；真正的防护在服务端（Supabase RLS）。']);
 
       var submit = function () {
         if (loginBtn.disabled) return;
@@ -1090,6 +1230,7 @@
         }).catch(function (e) {
           loginBtn.disabled = false;
           loginBtn.classList.remove('cs-btn-loading');
+          if (e.message === 'ADMIN_NOT_INITIALIZED') { self.renderAdminSetup(''); return; }
           if (e.message === 'MFA_REQUIRED') { msg.textContent = '请输入 MFA 动态码'; mfaInput.focus(); }
           else msg.textContent = e.message;
           msg.className = 'cs-msg cs-msg-error';
@@ -1226,10 +1367,12 @@
       ]);
 
       // 管理员安全设置
-      var c = Admin.creds();
+      var c = Admin.creds() || {};
       var mfaCard = el('div', { class: 'cs-card' }, [
         el('h3', {}, ['管理员安全']),
-        el('p', { class: 'cs-meta' }, ['MFA 状态：' + (c.mfaEnabled ? '✅ 已启用' : '❌ 未启用') + '　|　访问密钥：' + (c.accessKeyHash ? '✅ 已设置' : '⚠️ 使用默认密钥')]),
+        el('p', { class: 'cs-meta' }, ['账号：' + (c.user || '-') + '　|　MFA：' + (c.mfaEnabled ? '✅ 已启用' : '⚠️ 未启用')]),
+        el('p', { class: 'cs-meta' }, ['凭据以 PBKDF2(21 万轮) + 随机盐存于本机，不上传服务器；换浏览器或清缓存需重新初始化。']),
+        c.mfaEnabled ? null : el('p', { class: 'cs-meta', style: 'color:#b45309;font-weight:600' }, ['⚠️ 未启用 MFA：口令一旦泄露即可直接进入管理端，建议立即绑定。']),
         el('div', { class: 'cs-row cs-row-2' }, [
           el('button', { class: 'cs-btn cs-btn-outline cs-btn-sm', onclick: function () { self.renderAdminMfaSetup(); } }, [c.mfaEnabled ? '重新绑定 MFA' : '绑定 MFA']),
           el('button', { class: 'cs-btn cs-btn-outline cs-btn-sm', onclick: function () { self.renderAdminPassSetup(); } }, ['修改密码']),
@@ -1240,7 +1383,8 @@
       var backBtn = el('button', { class: 'cs-btn cs-btn-primary', onclick: function () { self.renderLogin(); } }, ['返回登入']);
 
         self.gateEl.innerHTML = '';
-        var dnCards = [header, annCard, userCard, wafCard, mfaCard];
+        var cloudCard = self.buildCloudCard();
+        var dnCards = [header, annCard, userCard, wafCard, mfaCard, cloudCard];
         /* BaaS 桥接配置卡（mfaCard 后） */
         if (window.QYBridge && typeof window.QYBridge.renderAdminCard === 'function') {
           var bridgeCard = el('div', { class: 'cs-card' });
@@ -1266,11 +1410,77 @@
         self.renderAdminLogin('加密数据通道解密失败，请重新验证');
       });
     },
+    // 云端管理员身份：写 Supabase 前先通过邮箱 OTP 登录，服务端 RLS 以此判定
+    buildCloudCard: function () {
+      var hasBridge = !!(global.QYBridge && typeof global.QYBridge.sendEmailOtp === 'function');
+      var emailInput = el('input', { type: 'email', placeholder: '管理员邮箱（须在 admins 白名单内）', autocomplete: 'username' });
+      var codeInput = el('input', { type: 'text', placeholder: '6 位邮箱验证码', maxlength: '6', autocomplete: 'one-time-code' });
+      var sendBtn = el('button', { class: 'cs-btn cs-btn-outline cs-btn-sm' }, ['发送验证码']);
+      var verifyBtn = el('button', { class: 'cs-btn cs-btn-primary cs-btn-sm' }, ['验证并登录云端']);
+      var outBtn = el('button', { class: 'cs-btn cs-btn-outline cs-btn-sm' }, ['退出云端身份']);
+      var stateEl = el('p', { class: 'cs-meta' }, ['正在检查云端身份…']);
+      if (!hasBridge) { sendBtn.disabled = true; verifyBtn.disabled = true; outBtn.disabled = true; }
+
+      var setState = function (txt, warn) {
+        stateEl.textContent = txt;
+        stateEl.style.color = warn ? '#b45309' : '#6b7a6b';
+      };
+      var refresh = function () {
+        if (!hasBridge) { setState('未加载桥接模块：云端身份不可用（可继续用 GitHub 云仓降级）', true); return; }
+        setState('正在检查云端身份…');
+        global.QYBridge.getAuthEmail().then(function (email) {
+          if (email) setState('✅ 已登录云端：' + email + '（写操作将携带该身份）');
+          else setState('⚠️ 尚未登录云端：RLS 收紧后，公告与配置将无法写入', true);
+        });
+      };
+      refresh();
+
+      sendBtn.onclick = function () {
+        if (!hasBridge) return;
+        var email = emailInput.value.trim();
+        if (!email) { setState('请先填写管理员邮箱', true); return; }
+        sendBtn.disabled = true;
+        setState('正在发送验证码…');
+        global.QYBridge.sendEmailOtp(email).then(function (r) {
+          sendBtn.disabled = false;
+          if (r && r.ok) setState('📧 验证码已发送至 ' + email + '（24 小时内有效）');
+          else setState('发送失败：' + ((r && r.msg) || '认证服务不可用'), true);
+        }).catch(function () { sendBtn.disabled = false; setState('发送失败：网络异常', true); });
+      };
+
+      verifyBtn.onclick = function () {
+        if (!hasBridge) return;
+        var email = emailInput.value.trim();
+        var code = codeInput.value.trim();
+        if (!email || !code) { setState('请填写邮箱与验证码', true); return; }
+        verifyBtn.disabled = true;
+        setState('正在校验…');
+        global.QYBridge.verifyEmailOtp(email, code).then(function (r) {
+          verifyBtn.disabled = false;
+          if (r && r.ok) { setState('✅ 云端登录成功'); refresh(); }
+          else setState('验证失败：' + ((r && r.msg) || '验证码错误或已过期'), true);
+        }).catch(function () { verifyBtn.disabled = false; setState('验证失败：网络异常', true); });
+      };
+
+      outBtn.onclick = function () {
+        if (!hasBridge || typeof global.QYBridge.signOutCloud !== 'function') return;
+        global.QYBridge.signOutCloud().then(function () { refresh(); });
+      };
+
+      return el('div', { class: 'cs-card' }, [
+        el('h3', {}, ['☁️ 云端管理员身份']),
+        el('p', { class: 'cs-meta' }, ['Supabase 收紧 RLS 后，只有白名单邮箱且已登录的请求才能写 config；这里用邮箱验证码取得该身份。']),
+        el('div', { class: 'cs-row' }, [emailInput]),
+        el('div', { class: 'cs-row cs-row-2' }, [codeInput, sendBtn]),
+        el('div', { class: 'cs-row cs-row-2' }, [verifyBtn, outBtn]),
+        stateEl
+      ]);
+    },
     renderAdminKeySetup: function () {
       var self = this;
-      var oldInput = el('input', { type: 'password', placeholder: '原访问密钥', id: 'csOldKey' });
-      var newInput = el('input', { type: 'password', placeholder: '新访问密钥（至少6位）', id: 'csNewKey' });
-      var confirmInput = el('input', { type: 'password', placeholder: '确认新密钥', id: 'csNewKey2' });
+      var oldInput = el('input', { type: 'password', placeholder: '原访问密钥', id: 'csOldKey', autocomplete: 'off' });
+      var newInput = el('input', { type: 'password', placeholder: '新访问密钥（≥16 位，含字母和数字）', id: 'csNewKey', autocomplete: 'new-password' });
+      var confirmInput = el('input', { type: 'password', placeholder: '确认新密钥', id: 'csNewKey2', autocomplete: 'new-password' });
       var msg = el('div', { class: 'cs-msg' });
 
       var box = el('div', { class: 'cs-box' }, [
@@ -1284,24 +1494,24 @@
           el('button', { class: 'cs-btn cs-btn-primary', onclick: function () {
             var oldK = oldInput.value, newK = newInput.value, newK2 = confirmInput.value;
             if (!oldK || !newK || !newK2) { msg.textContent = '请填写所有字段'; msg.className = 'cs-msg cs-msg-error'; return; }
-            if (newK.length < 6) { msg.textContent = '新密钥至少 6 位'; msg.className = 'cs-msg cs-msg-error'; return; }
+            if (newK.length < 16) { msg.textContent = '新密钥至少 16 位'; msg.className = 'cs-msg cs-msg-error'; return; }
+            if (!/[A-Za-z]/.test(newK) || !/\d/.test(newK)) { msg.textContent = '新密钥需同时包含字母和数字'; msg.className = 'cs-msg cs-msg-error'; return; }
             if (newK !== newK2) { msg.textContent = '两次输入的新密钥不一致'; msg.className = 'cs-msg cs-msg-error'; return; }
-            // 验证旧密钥
-            var c = Admin.creds();
-            Crypto.hash(oldK).then(function (h) {
-              if (h !== c.accessKeyHash) { msg.textContent = '原密钥错误'; msg.className = 'cs-msg cs-msg-error'; return; }
+            // 验证旧密钥（PBKDF2 + 恒定时间比较）
+            Admin.verifyAccessKey(oldK).then(function (ok) {
+              if (!ok) { msg.textContent = '原密钥错误'; msg.className = 'cs-msg cs-msg-error'; return; }
               // 二次确认弹窗
               var panel = el('div', { class: 'cs-overlay', onclick: function (e) { if (e.target === panel) panel.remove(); } }, [
                 el('div', { class: 'cs-modal' }, [
                   el('h3', {}, ['⚠️ 二次确认']),
                   el('p', { class: 'cs-meta' }, ['即将修改管理端访问密钥。修改后原密钥立即失效，下次登入需使用新密钥，请牢记新密钥。']),
-                  el('p', { class: 'cs-meta' }, ['新密钥：' + newK]),
+                  el('p', { class: 'cs-meta' }, ['新密钥长度 ' + newK.length + ' 位（不会明文显示在页面上）']),
                   el('div', { class: 'cs-row cs-row-2', style: 'margin-top:16px' }, [
                     el('button', { class: 'cs-btn cs-btn-danger', onclick: function () {
                       panel.remove();
                       Admin.setAccessKey(newK).then(function (ok) {
                         if (ok) { alert('访问密钥修改成功'); self.renderAdminPanel(); }
-                      });
+                      }).catch(function (err) { alert((err && err.message) || '修改失败'); });
                     } }, ['确认修改']),
                     el('button', { class: 'cs-btn cs-btn-outline', onclick: function () { panel.remove(); } }, ['再想想'])
                   ])
@@ -1320,7 +1530,7 @@
     renderAdminPassSetup: function () {
       var self = this;
       var oldInput = el('input', { type: 'password', placeholder: '原密码', id: 'csOldPass' });
-      var newInput = el('input', { type: 'password', placeholder: '新密码（至少6位）', id: 'csNewPass' });
+      var newInput = el('input', { type: 'password', placeholder: '新密码（≥12 位，含字母和数字）', id: 'csNewPass', autocomplete: 'new-password' });
       var confirmInput = el('input', { type: 'password', placeholder: '确认新密码', id: 'csNewPass2' });
       var msg = el('div', { class: 'cs-msg' });
 
@@ -1335,22 +1545,22 @@
           el('button', { class: 'cs-btn cs-btn-primary', onclick: function () {
             var oldP = oldInput.value, newP = newInput.value, newP2 = confirmInput.value;
             if (!oldP || !newP || !newP2) { msg.textContent = '请填写所有字段'; msg.className = 'cs-msg cs-msg-error'; return; }
-            if (newP.length < 6) { msg.textContent = '新密码至少 6 位'; msg.className = 'cs-msg cs-msg-error'; return; }
+            if (newP.length < 12) { msg.textContent = '新密码至少 12 位'; msg.className = 'cs-msg cs-msg-error'; return; }
+            if (!/[A-Za-z]/.test(newP) || !/\d/.test(newP)) { msg.textContent = '新密码需同时包含字母和数字'; msg.className = 'cs-msg cs-msg-error'; return; }
             if (newP !== newP2) { msg.textContent = '两次输入的新密码不一致'; msg.className = 'cs-msg cs-msg-error'; return; }
-            var c = Admin.creds();
-            Crypto.hash(oldP).then(function (h) {
-              if (h !== c.passHash) { msg.textContent = '原密码错误'; msg.className = 'cs-msg cs-msg-error'; return; }
+            Admin.verifyPassword(oldP).then(function (ok) {
+              if (!ok) { msg.textContent = '原密码错误'; msg.className = 'cs-msg cs-msg-error'; return; }
               var panel = el('div', { class: 'cs-overlay', onclick: function (e) { if (e.target === panel) panel.remove(); } }, [
                 el('div', { class: 'cs-modal' }, [
                   el('h3', {}, ['⚠️ 二次确认']),
                   el('p', { class: 'cs-meta' }, ['即将修改管理端密码。修改后原密码立即失效，下次登入需使用新密码，请牢记新密码。']),
-                  el('p', { class: 'cs-meta' }, ['新密码：' + newP]),
+                  el('p', { class: 'cs-meta' }, ['新密码长度 ' + newP.length + ' 位（不会明文显示在页面上）']),
                   el('div', { class: 'cs-row cs-row-2', style: 'margin-top:16px' }, [
                     el('button', { class: 'cs-btn cs-btn-danger', onclick: function () {
                       panel.remove();
                       Admin.setPassword(newP).then(function (ok) {
                         if (ok) { alert('密码修改成功'); self.renderAdminPanel(); }
-                      });
+                      }).catch(function (err) { alert((err && err.message) || '修改失败'); });
                     } }, ['确认修改']),
                     el('button', { class: 'cs-btn cs-btn-outline', onclick: function () { panel.remove(); } }, ['再想想'])
                   ])
@@ -1383,7 +1593,8 @@
           Mfa.verify(secret, code).then(function (ok) {
             if (!ok) { alert('动态码错误'); return; }
             var c = Admin.creds();
-            c.mfaSecret = secret; c.mfaEnabled = true;
+            if (!c) { alert('管理端尚未初始化'); return; }
+            c.mfaSecret = secret; c.mfaEnabled = true; c.updatedAt = now();
             Store.json('adminCred', c);
             alert('MFA 绑定成功');
             self.renderAdminPanel();
