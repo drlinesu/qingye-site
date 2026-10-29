@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/* ============================================================
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/* ============================================================
  * 轻野 · 桥接 (Light Wild · Bridge)
  * BaaS 中间层 —— 唯一与 Supabase 交互的模块（安全保护 + 隔离）
  *   ① 设计目的：后端只集中在本文件，后续迁移只改此一处
@@ -369,6 +369,27 @@
             });
         }).catch(function () { return { ok: false, code: 'unavailable' }; });
       });
+    },
+
+    /* ---------- 云端管理员身份（Supabase Auth）----------
+       收紧 RLS 后，config/users 只允许「白名单邮箱 + 已登录」写入，
+       因此管理端必须先完成一次邮箱验证码登录，后续写操作自动携带 JWT。 */
+    getAuthEmail: function () {
+      var self = this;
+      return self._getClient().then(function (client) {
+        if (!client) return null;
+        return client.auth.getSession().then(function (res) {
+          var s = res && res.data && res.data.session;
+          return s && s.user ? (s.user.email || null) : null;
+        }).catch(function () { return null; });
+      }).catch(function () { return null; });
+    },
+    signOutCloud: function () {
+      var self = this;
+      return self._getClient().then(function (client) {
+        if (!client) return Promise.resolve(false);
+        return client.auth.signOut().then(function () { return true; }).catch(function () { return false; });
+      }).catch(function () { return false; });
     },
 
     /* 读取 waf_logs（管理端） */
