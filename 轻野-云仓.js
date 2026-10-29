@@ -1,4 +1,4 @@
-﻿﻿﻿﻿/* ============================================================
+﻿/* ============================================================
  * 轻野 · 云仓 (Light Wild · Cloud Hub)
  * GitHub 配置同步模块 —— 零侵入：不修改 轻野.html 的任何计算与渲染逻辑。
  *   ① 管理端：在 云盾 管理控制台注入「GitHub 配置」卡片
@@ -12,10 +12,22 @@
   'use strict';
   if (global.QYHub) return;
 
-  var STORE_PREFIX = 'cs_';
+  var STORAGE_PREFIX = 'cs_';
   var SETTINGS_KEY = 'hubSettings';   /* 明文 Store：owner/repo/branch/path（非敏感） */
   var TOKEN_KEY = 'hubToken';          /* Channel 加密：token（敏感） */
   var CACHE_KEY = 'hubCache';          /* 明文 Store：config.json 缓存 */
+
+  /* 默认仓库坐标 —— 全站访客共用。
+     为什么需要：localStorage 里的 hubSettings 只在「保存过配置的浏览器」存在，
+     普通访客没有它，若不写死默认值，QYHub.getConfig() 永远返回 null，GitHub 同步等于没接。
+     仓库必须是 public，否则 raw.githubusercontent / jsDelivr 取不到（私有仓库不支持匿名读）。
+     这段会被「配置云仓.ps1」自动改写；也可以手工填。 */
+  var DEFAULT_REPO = {
+    owner: 'drlinesu',
+    repo: 'qingye-config',
+    branch: 'main',
+    path: 'config.json'
+  };
   var CACHE_TTL = 5 * 60 * 1000;       /* 5 分钟 */
 
   /* ---------- 工具 ---------- */
@@ -72,6 +84,15 @@
           if (s && s.owner && s.repo) return s;
         }
       } catch (e) {}
+      /* 本机没保存过配置 → 用写死的默认仓库，保证普通访客也能读到全站配置 */
+      if (DEFAULT_REPO.owner && DEFAULT_REPO.repo) {
+        return {
+          owner: DEFAULT_REPO.owner,
+          repo: DEFAULT_REPO.repo,
+          branch: DEFAULT_REPO.branch || 'main',
+          path: DEFAULT_REPO.path || 'config.json'
+        };
+      }
       return null;
     },
 
