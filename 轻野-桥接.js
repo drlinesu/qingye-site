@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/* ============================================================
+﻿﻿﻿﻿﻿﻿/* ============================================================
  * 轻野 · 桥接 (Light Wild · Bridge)
  * BaaS 中间层 —— 唯一与 Supabase 交互的模块（安全保护 + 隔离）
  *   ① 设计目的：后端只集中在本文件，后续迁移只改此一处
@@ -54,6 +54,34 @@
     }, 100);
   }
 
+  /* URL 归一化：去空格、补协议、去尾斜杠、容忍误粘的 /rest/v1 */
+  function normalizeUrl(u) {
+    var s = String(u == null ? '' : u).trim();
+    if (!s) return '';
+    if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+    s = s.replace(/\/+$/, '');
+    s = s.replace(/\/rest\/v1$/i, '');
+    return s;
+  }
+
+  /* 把 SDK / PostgREST 的英文错误翻译成可操作的提示 */
+  function explainErr(m) {
+    var s = String(m || '');
+    if (/Invalid API key|No API key|Missing apikey|apikey/i.test(s))
+      return 'API key 无效：确认复制的是该项目 Settings → API 里的 publishable / anon key（不要带空格或换行）';
+    if (/Failed to fetch|NetworkError|Load failed|Network request failed|fetch failed/i.test(s))
+      return '浏览器连不上 Supabase：检查网络/代理/DNS（命令行能通不代表浏览器能通，常见于代理规则或插件拦截）';
+    if (/relation .* does not exist|PGRST205|Could not find the table/i.test(s))
+      return 'config 表不存在：先在 Supabase SQL Editor 执行建表 SQL';
+    if (/permission denied|42501|row-level security/i.test(s))
+      return '权限不足：RLS / GRANT 未配置，按《BaaS 后端配置手册》执行 SQL';
+    if (/Invalid URL|Failed to parse URL|Invalid supabaseUrl/i.test(s))
+      return 'URL 格式不对：应形如 https://xxxx.supabase.co（不要带 /rest/v1）';
+    if (/Invalid API key/i.test(s))
+      return '密钥格式不被识别：请用项目 Settings → API 中的 publishable key';
+    return s || '连接失败';
+  }
+
   /* ---------- Bridge 模块 ---------- */
   var Bridge = {
     _client: null,
@@ -71,8 +99,8 @@
     /* 保存设置（url + anonKey → Channel 加密） */
     saveSettings: function (settings) {
       return global.CloudShield.Channel.write(SETTINGS_KEY, {
-        url: (settings.url || '').trim(),
-        anonKey: (settings.anonKey || '').trim()
+        url: normalizeUrl(settings.url),
+        anonKey: String(settings.anonKey || '').trim()
       });
     },
 
@@ -92,10 +120,11 @@
       var self = this;
       if (self._client) return Promise.resolve(self._client);
       return self.getSettings().then(function (s) {
-        if (!s.url || !s.anonKey) return null;
+        var url = normalizeUrl(s.url);
+        if (!url || !s.anonKey) return null;
         if (!global.supabase || typeof global.supabase.createClient !== 'function') return null;
         try {
-          self._client = global.supabase.createClient(s.url, s.anonKey);
+          self._client = global.supabase.createClient(url, String(s.anonKey).trim());
           return self._client;
         } catch (e) { return null; }
       });
@@ -415,21 +444,26 @@
 
     /* 测试连接（用临时 client，不缓存） */
     testConnection: function (settings) {
-      var s = settings;
-      if (!s.url || !s.anonKey) return Promise.resolve({ ok: false, msg: '请填写 URL 和 anon key' });
+      var s = settings || {};
+      var url = normalizeUrl(s.url);
+      var key = String(s.anonKey || '').trim();
+      if (!url || !key) return Promise.resolve({ ok: false, msg: '请填写 URL 和 anon key' });
+      if (!/^https?:\/\/[^\s/]+\.[^\s/]+/i.test(url)) {
+        return Promise.resolve({ ok: false, msg: 'URL 格式不对：应形如 https://xxxx.supabase.co' });
+      }
       if (!global.supabase || typeof global.supabase.createClient !== 'function') {
-        return Promise.resolve({ ok: false, msg: 'Supabase SDK 未加载（检查 CDN）' });
+        return Promise.resolve({ ok: false, msg: 'Supabase SDK 未加载（CDN 被拦截或未联网）：刷新重试，或把 SDK 放到本地引用' });
       }
       try {
-        var c = global.supabase.createClient(s.url.trim(), s.anonKey.trim());
+        var c = global.supabase.createClient(url, key);
         return c.from('config').select('*').limit(1)
           .then(function (res) {
-            if (res.error) return { ok: false, msg: res.error.message || '连接失败' };
-            return { ok: true, msg: '连接正常，config 表可读' };
+            if (res.error) return { ok: false, msg: explainErr(res.error.message || res.error.msg || JSON.stringify(res.error)) };
+            return { ok: true, msg: '连接正常，config 表可读（' + url + '）' };
           })
-          .catch(function (e) { return { ok: false, msg: (e && e.message) || '连接失败' }; });
+          .catch(function (e) { return { ok: false, msg: explainErr(e && e.message) }; });
       } catch (e) {
-        return Promise.resolve({ ok: false, msg: e.message || '创建客户端失败' });
+        return Promise.resolve({ ok: false, msg: explainErr(e && e.message) });
       }
     },
 
