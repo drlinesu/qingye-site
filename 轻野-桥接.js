@@ -1,4 +1,4 @@
-﻿﻿/* ============================================================
+﻿﻿﻿﻿﻿﻿/* ============================================================
  * 轻野 · 桥接 (Light Wild · Bridge)
  * BaaS 中间层 —— 唯一与 Supabase 交互的模块（安全保护 + 隔离）
  *   ① 设计目的：后端只集中在本文件，后续迁移只改此一处
@@ -512,11 +512,20 @@
         }
         var all = [];
         var page = 1;
+        /* 新版 sb_secret_ 密钥只走 apikey 头（它本身就是服务端身份）；
+           旧版 service_role 是 JWT，需要同时放进 Authorization。 */
+        var authHeaders = /^sb_secret_/i.test(sk)
+          ? { apikey: sk }
+          : { apikey: sk, Authorization: 'Bearer ' + sk };
         function req(p) {
           return fetch(s.url + '/auth/v1/admin/users?per_page=200&page=' + p, {
-            headers: { apikey: sk, Authorization: 'Bearer ' + sk }
+            headers: authHeaders
           }).then(function (r) {
-            if (r.status === 401 || r.status === 403) throw new Error('密钥被拒绝：确认是 service_role / secret key，且属于该项目');
+            if (r.status === 401 || r.status === 403) {
+              throw new Error(/^sb_secret_/i.test(sk)
+                ? 'sb_secret_ 密钥被拒：确认是该项目 Project Settings → API Keys → Secret keys 里的完整值（不是 publishable）'
+                : '密钥被拒绝：确认是 service_role JWT（eyJ 开头）且属于该项目');
+            }
             if (!r.ok) throw new Error('后端返回 HTTP ' + r.status);
             return r.json();
           });
@@ -581,6 +590,11 @@
             status.textContent = s.isDefault
               ? '当前使用内置默认配置（可在下方填写并保存以覆盖）：' + s.url
               : '已配置：' + s.url;
+            /* 打开面板自动测一次：避免残留上次点击的旧报错，也顺手验证当前 key 是否可用 */
+            self.testConnection({ url: s.url, anonKey: s.anonKey }).then(function (r) {
+              status.style.color = r.ok ? '#16a34a' : '#dc2626';
+              status.textContent = (r.ok ? '✅ ' : '❌ ') + r.msg;
+            });
           } else {
             status.style.color = '#64748b';
             status.textContent = '未配置 Supabase';
