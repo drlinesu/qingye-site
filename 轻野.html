@@ -346,11 +346,12 @@ window.addEventListener('DOMContentLoaded', function () {
   document.head.appendChild(s);
 });
 </script>
-<script src="轻野-云盾.js?v=202610291224" defer></script>
-<script src="轻野-桥接.js?v=202610291224" defer></script>
-<script src="轻野-启程.js?v=202610291224" defer></script>
-<script src="轻野-捐赠.js?v=202610291224" defer></script>
-<script src="轻野-云仓.js?v=202610291224" defer></script>
+<script src="轻野-云盾.js?v=202610301827" defer></script>
+<script src="轻野-桥接.js?v=202610301827" defer></script>
+<script src="轻野-启程.js?v=202610301827" defer></script>
+<script src="轻野-捐赠.js?v=202610301827" defer></script>
+<script src="轻野-云仓.js?v=202610301827" defer></script>
+<script src="轻野-轻旅.js?v=202610301827" defer></script>
 </head>
 <body>
 <div id="csGate"></div>
@@ -2030,10 +2031,14 @@ function multiToMode(r,res){
 /* ================= 3 段方案（启发式：在最优 2 段基础上插入中转；不修改原 2 段算法） ================= */
 function nearestCityToPoint(lat,lng,excludeNames){
   // 找距离 (lat,lng) 最近且不在排除列表的城市
+  // 注意：hav() 取的是 [1]=lat、[2]=lng，这里必须补齐成三元组，
+  // 否则 [lat,lng] 会被当成 [name,lat] 来算，距离恒为 NaN，函数永远返回 null。
+  const from=[0,lat,lng];
+  const exclude=excludeNames||[];
   let best=null,bestD=Infinity;
   for(const c of CITIES){
-    if(excludeNames.includes(c[0]))continue;
-    const d=hav([lat,lng],[c[1],c[2]]);
+    if(exclude.includes(c[0]))continue;
+    const d=hav(from,[0,c[1],c[2]]);
     if(d<bestD){bestD=d;best=c;}
   }
   return best;
