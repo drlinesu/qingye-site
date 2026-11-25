@@ -1,0 +1,55 @@
+name: supabase-keepalive
+
+# 轻野 · 云端保活
+# 免费版 Supabase 连续 7 天无数据库活动会被暂停（暂停后域名直接 NXDOMAIN，
+# 网站验证码邮件随之失效）。这里每天打一次真实 REST 查询，保持项目活跃。
+# 本机另有一份 Windows 计划任务（安装-保活计划任务.ps1）做双保险。
+
+on:
+  schedule:
+    # UTC 01:20 = 北京时间 09:20；GitHub 定时任务可能延迟几分钟到几十分钟
+    - cron: '20 1 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: supabase-keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 检查项目域名是否可解析
+        run: |
+          set -e
+          HOST="${{ vars.SUPABASE_REF || 'qiezweasohrgxqaefiqh' }}.supabase.co"
+          echo "host=$HOST"
+          if getent hosts "$HOST"; then
+            echo "DNS OK"
+          else
+            echo "::error::$HOST 解析失败——项目很可能已被暂停或删除，请到 supabase.com 控制台恢复"
+            exit 2
+          fi
+
+      - name: 真实查询（保持数据库活动）
+        env:
+          KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_bXBjIDP7k0OZv92CggD_rg_0VT1TnDA' }}
+        run: |
+          set -e
+          HOST="${{ vars.SUPABASE_REF || 'qiezweasohrgxqaefiqh' }}.supabase.co"
+          URL="https://$HOST/rest/v1/config?select=key&limit=1"
+          code=$(curl -sS -m 30 -o /tmp/body.txt -w '%{http_code}' \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY" "$URL")
+          echo "HTTP $code"
+          head -c 300 /tmp/body.txt || true
+          echo
+          if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then
+            echo "✅ 保活成功"
+          elif [ "$code" = "401" ] || [ "$code" = "403" ]; then
+            # 权限被拒也说明后端活着、查询已落到 Postgres
+            echo "✅ 后端可达（HTTP $code，权限拒绝但已产生活动）"
+          else
+            echo "::error::保活失败：HTTP $code"
+            exit 1
+          fi
